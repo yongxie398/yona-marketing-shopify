@@ -1,0 +1,39 @@
+{
+  "name": "yona-marketing-shopify",
+  "version": "1.0.0",
+  "description": "Shopify App Service for AI Revenue Agent",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "@shopify/app-bridge": "^3.7.9",
+    "@shopify/app-bridge-react": "^3.7.9",
+    "@shopify/polaris": "^12.0.0",
+    "@shopify/polaris-icons": "^6.2.0",
+    "typescript": "latest",
+    "@types/react": "latest",
+    "@types/node": "latest",
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "@types/react-dom": "latest",
+    "eslint": "latest",
+    "eslint-config-next": "latest"
+  },
+  "keywords": [
+    "shopify",
+    "app",
+    "ai",
+    "revenue",
+    "marketing"
+  ],
+  "author": "Yona Marketing",
+  "license": "MIT"
+}

@@ -1,55 +1,70 @@
+import { generateAuthUrl, exchangeCodeForAccessToken, registerWebhooks } from '@/utils/shopify';
+import { DatabaseService } from '@/lib/db';
+import env from '@/utils/env';
+
 export default async function handler(req, res) {
   if (req.method === 'GET') {
-    // Shopify OAuth callback handler
-    const { code, shop } = req.query;
+    const { shop } = req.query;
     
-    if (!code || !shop) {
-      return res.status(400).json({ error: 'Missing code or shop' });
+    if (!shop) {
+      return res.status(400).json({ error: 'Shop parameter is required' });
     }
-
+    
+    // Generate and redirect to Shopify OAuth URL
+    const authUrl = generateAuthUrl(
+      shop,
+      env.SHOPIFY_API_KEY,
+      ['read_customers', 'read_products', 'read_orders', 'read_checkouts']
+    );
+    
+    res.redirect(authUrl);
+  } else if (req.method === 'POST') {
+    // Handle OAuth callback
+    const { shop, hmac, code, state, timestamp } = req.body;
+    
+    if (!shop || !hmac || !code || !state || !timestamp) {
+      return res.status(400).json({ error: 'Missing required parameters' });
+    }
+    
     try {
-      // Exchange authorization code for access token
-      const tokenResponse = await fetch(`https://${shop}/admin/oauth/access_token`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          client_id: process.env.SHOPIFY_API_KEY,
-          client_secret: process.env.SHOPIFY_API_SECRET,
-          code: code,
-        }),
-      });
-
-      const tokenData = await tokenResponse.json();
+      // Exchange code for access token
+      const { accessToken, shopName } = await exchangeCodeForAccessToken(
+        shop,
+        code,
+        env.SHOPIFY_API_KEY,
+        env.SHOPIFY_API_SECRET
+      );
       
-      if (!tokenResponse.ok) {
-        throw new Error(`Shopify API error: ${tokenData.error_description}`);
-      }
-
-      // Store shop and token in your database
-      // This is where you'd typically save the shop data and access token
-      console.log(`Shop ${shop} authenticated successfully`);
-
+      // Store shop information in database
+      const store = await DatabaseService.createStore({
+        shop_domain: shop,
+        shop_name: shopName,
+        access_token: accessToken,
+        hmac_secret: env.SHOPIFY_API_SECRET,
+      });
+      
+      // Register webhooks
+      await registerWebhooks(accessToken, shop);
+      
       // Forward shop data to Core AI Service
-      await fetch(`${process.env.CORE_AI_SERVICE_URL}/api/shops/register`, {
+      await fetch(`${env.CORE_AI_SERVICE_URL}/api/shops/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.CORE_AI_SERVICE_API_KEY}`
+          'Authorization': `Bearer ${env.CORE_AI_SERVICE_API_KEY}`
         },
         body: JSON.stringify({
           shop_domain: shop,
-          access_token: tokenData.access_token,
-          shop_data: tokenData
+          access_token: accessToken,
+          shop_name: shopName
         })
       });
-
-      // Redirect to Shopify admin with success
-      res.redirect(`https://${shop}/admin/apps/${process.env.SHOPIFY_API_KEY}`);
+      
+      // Redirect to Shopify admin
+      res.redirect(`https://${shop}/admin/apps/${env.SHOPIFY_API_KEY}`);
     } catch (error) {
       console.error('OAuth error:', error);
-      res.status(500).json({ error: 'Authentication failed' });
+      res.status(500).json({ error: 'OAuth failed' });
     }
   } else {
     res.status(405).json({ error: 'Method not allowed' });

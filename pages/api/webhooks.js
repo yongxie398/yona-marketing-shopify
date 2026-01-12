@@ -1,44 +1,53 @@
-import { verifyWebhook } from '@shopify/koa-shopify-webhooks';
+// pages/api/webhooks.js
+import { validateHmacSignature, processWebhook } from '@/utils/shopify';
+import env from '@/utils/env';
 
-const webhook = {
-  async post(req, res) {
-    try {
-      // Verify the webhook signature
-      const { isValid, topic, shop_domain, body } = await verifyWebhook({
-        rawBody: req.body,
-        rawHeaders: req.headers,
-        webhookSecret: process.env.SHOPIFY_API_SECRET
-      });
-
-      if (!isValid) {
-        return res.status(401).send('Unauthorized: Invalid webhook signature');
-      }
-
-      // Forward the event to Core AI Service
-      const aiServiceResponse = await fetch(`${process.env.CORE_AI_SERVICE_URL}/api/events/shopify`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.CORE_AI_SERVICE_API_KEY}`
-        },
-        body: JSON.stringify({
-          topic,
-          shop_domain,
-          data: body,
-          timestamp: new Date().toISOString()
-        })
-      });
-
-      if (!aiServiceResponse.ok) {
-        console.error('Failed to forward event to AI service:', await aiServiceResponse.text());
-      }
-
-      res.status(200).send('Webhook received');
-    } catch (error) {
-      console.error('Webhook error:', error);
-      res.status(500).send('Internal Server Error');
-    }
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
-};
+  
+  try {
+    // Get required headers
+    const hmac = req.headers['x-shopify-hmac-sha256'];
+    const topic = req.headers['x-shopify-topic'];
+    const shopDomain = req.headers['x-shopify-shop-domain'];
+    
+    // Validate HMAC signature
+    const isValid = validateHmacSignature(
+      req.body, 
+      hmac, 
+      env.SHOPIFY_API_SECRET
+    );
+    
+    if (!isValid) {
+      console.error('Invalid webhook signature');
+      return res.status(401).json({ error: 'Unauthorized: Invalid signature' });
+    }
+    
+    if (!topic || !shopDomain) {
+      console.error('Missing required webhook headers');
+      return res.status(400).json({ error: 'Bad Request: Missing headers' });
+    }
+    
+    // Parse the payload
+    const payload = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    
+    // Process the webhook
+    await processWebhook(topic, shopDomain, payload);
+    
+    // Respond to Shopify that the webhook was received
+    res.status(200).json({ success: true });
+    
+  } catch (error) {
+    console.error('Webhook processing error:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+}
 
-export default webhook;
+// Config to disable body parsing, so we can validate HMAC
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};

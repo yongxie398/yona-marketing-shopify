@@ -1,0 +1,23 @@
+# This file configures your app for development and Shopify CLI integration
+# For more information, visit: https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "fc68de7fd8be10a225b403414f32ef53"  # Replace with your actual API key from Shopify Partner Dashboard
+name = "AI Revenue Agent"
+application_url = "http://localhost:3000"
+embedded = true
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_customers,write_customers,read_orders,write_orders,read_products,write_products,read_checkouts,write_checkouts,read_marketing_events,write_marketing_events,read_content,read_analytics,read_script_tags,write_script_tags"
+
+[auth]
+redirect_urls = [
+  "http://localhost:3000/api/auth/callback"
+]
+
+[webhooks]
+api_version = "2026-01"
+
+[commands]
+# Use these commands to run your app in development (optional)
+dev = "npm run dev"

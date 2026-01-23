@@ -44,6 +44,7 @@ This service follows the suggested approach with TypeScript/Node.js for Shopify-
 - npm or yarn
 - Shopify Partner Account
 - Shopify development store
+- PostgreSQL database
 
 ### Environment Configuration
 
@@ -61,6 +62,14 @@ SHOPIFY_API_KEY=your_actual_shopify_api_key
 SHOPIFY_API_SECRET=your_actual_shopify_api_secret
 SHOPIFY_APP_URL=https://your-app-url.ngrok.io  # Replace with your actual app URL
 NEXT_PUBLIC_SHOPIFY_API_KEY=your_actual_shopify_api_key
+
+# Database Configuration
+DATABASE_URL=postgresql://username:password@localhost:5432/database_name
+DB_USER=postgres
+DB_HOST=localhost
+DB_NAME=yona_marketing
+DB_PASSWORD=postgres
+DB_PORT=5432
 
 # Core AI Service Configuration
 CORE_AI_SERVICE_URL=http://localhost:8000  # URL of Core AI Service
@@ -83,6 +92,18 @@ npm run dev
 ```
 
 The app will be available at http://localhost:3000
+
+### Shopify Integration
+
+To install and test the app in Shopify:
+
+1. Ensure your app is accessible from the internet (use ngrok for local development)
+2. Update `SHOPIFY_APP_URL` in your environment variables
+3. Visit: `https://your-development-store.myshopify.com/admin/apps`
+4. Click "Manage private apps" or upload the app
+5. Install the app using the OAuth flow
+
+The app will automatically register webhooks and begin processing commerce events.
 
 ## Key Features
 
@@ -132,16 +153,34 @@ This service communicates with the Core AI Marketing Service via HTTP API:
 5. Personalized messages generated and sent to customers
 6. Revenue attribution tracked and reported
 
+## Database Schema
+
+The application requires the following database tables:
+
+- `stores`: Store configuration and credentials
+- `events`: Commerce events from Shopify
+- `ai_decisions`: AI-generated decisions
+- `email_delivery_logs`: Message delivery logs
+- `revenue_attributions`: Revenue attribution tracking
+
+Run the migration script to set up the tables:
+
+```bash
+psql -d your_database_name -f migrate-store-config-table.sql
+```
+
 ## Development
 
 ### Key Components
 
-- `pages/api/auth.js`: Handles Shopify OAuth flow
-- `pages/api/webhooks.js`: Processes incoming Shopify webhooks
+- `src/app/api/auth/begin/route.ts`: Handles Shopify OAuth initiation
+- `src/app/api/auth/callback/route.ts`: Handles Shopify OAuth callback and token exchange
+- `src/app/api/webhooks/route.ts`: Processes incoming Shopify webhooks
 - `src/services/ai-decision-engine.ts`: Core AI logic for decision making
 - `src/lib/db.ts`: Database operations
 - `src/utils/shopify.ts`: Shopify API utilities
 - `src/app/page.tsx`: Main dashboard page
+- `src/app/layout.tsx`: Root layout with App Bridge integration
 
 ### Architecture Patterns
 

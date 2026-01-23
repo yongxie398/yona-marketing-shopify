@@ -1,291 +1,291 @@
 // Shopify API utilities for the AI Revenue Agent
-import { DatabaseService } from '@/lib/db';
-import { ShopifyWebhookPayload } from '@/types';
 import { PoolClient } from 'pg';
 
-/**
- * Validates HMAC signature for Shopify webhooks
- */
-export function validateHmacSignature(
-  rawBody: string | Buffer,
-  signature: string | string[] | undefined,
-  secret: string
-): boolean {
-  if (!signature) {
-    console.error('Missing signature in request');
-    return false;
-  }
+// Simple in-memory cache for deduplication (would use Redis in production)
+const webhookCache = new Map<string, number>();
 
-  const crypto = require('crypto');
-  const expectedSignature = crypto
-    .createHmac('sha256', secret)
-    .update(rawBody, 'utf8')
-    .digest('hex');
-
-  const receivedSignature = Array.isArray(signature) ? signature[0] : signature;
-  return crypto.timingSafeEqual(
-    Buffer.from(expectedSignature, 'hex'),
-    Buffer.from(receivedSignature, 'hex')
-  );
-}
-
-/**
- * Generates the Shopify OAuth authorization URL
- */
-export function generateAuthUrl(shop: string, apiKey: string, scopes: string[]): string {
-  const shopDomain = shop.includes('.myshopify.com') ? shop : `${shop}.myshopify.com`;
-  const redirectUri = `${process.env.SHOPIFY_APP_URL}/api/auth/callback`;
-  const nonce = Math.random().toString(36).substring(2);
+export function addToCache(key: string, ttlMs: number = 300000): void { // 5 minutes default TTL
+  webhookCache.set(key, Date.now() + ttlMs);
   
-  const authUrl = `https://${shopDomain}/admin/oauth/authorize?` +
-    `client_id=${apiKey}&` +
-    `scope=${scopes.join(',')}&` +
-    `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-    `state=${nonce}`;
-
-  return authUrl;
-}
-
-/**
- * Exchanges authorization code for access token
- */
-export async function exchangeCodeForAccessToken(
-  shop: string,
-  code: string,
-  apiKey: string,
-  apiSecret: string
-): Promise<{ accessToken: string; shopName: string }> {
-  const shopDomain = shop.includes('.myshopify.com') ? shop : `${shop}.myshopify.com`;
-  const redirectUri = `${process.env.SHOPIFY_APP_URL}/api/auth/callback`;
-
-  const response = await fetch(`https://${shopDomain}/admin/oauth/access_token`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      client_id: apiKey,
-      client_secret: apiSecret,
-      code: code,
-      redirect_uri: redirectUri,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to exchange code for access token: ${response.status}`);
-  }
-
-  const data = await response.json();
-  const accessToken = data.access_token;
-  
-  // Get shop name
-  const shopResponse = await fetch(`https://${shopDomain}/admin/shop.json`, {
-    headers: {
-      'X-Shopify-Access-Token': accessToken,
-    },
-  });
-  
-  if (!shopResponse.ok) {
-    throw new Error(`Failed to get shop info: ${shopResponse.status}`);
-  }
-  
-  const shopData = await shopResponse.json();
-  
-  return {
-    accessToken,
-    shopName: shopData.shop.name,
-  };
-}
-
-/**
- * Registers webhooks with Shopify
- */
-export async function registerWebhooks(accessToken: string, shopDomain: string): Promise<void> {
-  const webhookUrl = `${process.env.SHOPIFY_APP_URL}/api/webhooks`;
-  const topics = ['orders/create', 'checkouts/update', 'products/create', 'customers/create'];
-
-  for (const topic of topics) {
-    const response = await fetch(`https://${shopDomain}/admin/api/2023-01/webhooks.json`, {
-      method: 'POST',
-      headers: {
-        'X-Shopify-Access-Token': accessToken,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        webhook: {
-          topic,
-          address: webhookUrl,
-          format: 'json',
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      console.error(`Failed to register webhook for topic ${topic}:`, await response.text());
-    } else {
-      console.log(`Successfully registered webhook for topic ${topic}`);
+  // Clean up expired entries periodically
+  if (webhookCache.size > 1000) { // Prevent unlimited growth
+    const now = Date.now();
+    const entriesToDelete: string[] = [];
+    // Use Array.from to convert iterator to array to avoid the iteration error
+    const entries = Array.from(webhookCache.entries());
+    for (const [cachedKey, expiry] of entries) {
+      if (expiry < now) {
+        entriesToDelete.push(cachedKey);
+      }
+    }
+    for (const key of entriesToDelete) {
+      webhookCache.delete(key);
     }
   }
 }
 
-/**
- * Processes incoming Shopify webhook
- */
-export async function processWebhook(topic: string, shopDomain: string, payload: ShopifyWebhookPayload): Promise<void> {
-  console.log(`Processing webhook: ${topic} for shop: ${shopDomain}`);
+export function isInCache(key: string): boolean {
+  const expiry = webhookCache.get(key);
+  if (expiry === undefined) {
+    return false;
+  }
   
-  // Find store in database
-  const store = await DatabaseService.getStoreByDomain(shopDomain);
-  if (!store) {
-    console.error(`Store not found for domain: ${shopDomain}`);
-    return;
+  if (Date.now() > expiry) {
+    // Entry has expired
+    webhookCache.delete(key);
+    return false;
   }
+  
+  return true;
+}
 
-  // Normalize the event based on topic
-  let eventType: string;
-  let customerId: string | undefined;
-  let productIds: string[] = [];
-  let orderId: string | undefined;
-  let checkoutId: string | undefined;
+export function removeFromCache(key: string): void {
+  webhookCache.delete(key);
+}
 
-  switch (topic) {
-    case 'products/create':
-    case 'products/update':
-      eventType = 'product_view';
-      
-      // Store product data in the products table
-      if (payload.product) {
-        await storeProductData(payload.product, store.id);
-      }
-      break;
-    case 'checkouts/update':
-    case 'checkouts/create':
-      eventType = 'checkout_started';
-      customerId = payload.checkout?.customer?.id?.toString() || payload.customer?.id?.toString();
-      checkoutId = payload.checkout?.id?.toString();
-      if (payload.checkout?.line_items) {
-        productIds = payload.checkout.line_items.map((item: any) => item.product_id.toString());
-      }
-      
-      // Store checkout data in the checkouts table
-      if (payload.checkout) {
-        await storeCheckoutData(payload.checkout, store.id);
-      }
-      break;
-    case 'orders/create':
-      eventType = 'purchase_completed';
-      customerId = payload.order?.customer?.id?.toString();
-      orderId = payload.order?.id?.toString();
-      if (payload.order?.line_items) {
-        productIds = payload.order.line_items.map((item: any) => item.product_id.toString());
-      }
-      
-      // Store order data in the orders table
-      if (payload.order) {
-        await storeOrderData(payload.order, store.id);
-      }
-      break;
-    case 'customers/create':
-    case 'customers/update':
-      eventType = 'customer_updated';
-      customerId = payload.customer?.id?.toString();
-      
-      // Store customer data in the customers table
-      if (payload.customer) {
-        await storeCustomerData(payload.customer, store.id);
-      }
-      break;
-    default:
-      eventType = topic.replace(/\//g, '_'); // Convert 'orders/paid' to 'orders_paid'
-      
-      // Try to extract common data patterns
-      if (payload.checkout) {
-        checkoutId = payload.checkout.id?.toString();
-        customerId = payload.checkout.customer?.id?.toString();
-        if (payload.checkout.line_items) {
-          productIds = payload.checkout.line_items.map((item: any) => item.product_id.toString());
-        }
-        await storeCheckoutData(payload.checkout, store.id);
-      } else if (payload.order) {
-        orderId = payload.order.id?.toString();
-        customerId = payload.order.customer?.id?.toString();
-        if (payload.order.line_items) {
-          productIds = payload.order.line_items.map((item: any) => item.product_id.toString());
-        }
-        await storeOrderData(payload.order, store.id);
-      } else if (payload.customer) {
-        customerId = payload.customer.id?.toString();
-        await storeCustomerData(payload.customer, store.id);
-      } else if (payload.product) {
-        await storeProductData(payload.product, store.id);
-      }
-  }
+/**
+ * Validates a Shopify webhook request by checking the HMAC signature
+ * @param payload The raw payload string
+ * @param signature The signature from the x-shopify-hmac-sha256 header
+ * @param secret The webhook secret
+ * @returns boolean indicating if the signature is valid
+ */
+export function validateShopifyWebhook(payload: string, signature: string, secret: string): boolean {
+  const crypto = require('crypto'); // Dynamically import since it's not available in edge runtime
+  const expectedSignature = 'sha256=' + crypto
+    .createHmac('sha256', secret)
+    .update(payload)
+    .digest('hex');
+  
+  return crypto.timingSafeEqual(
+    Buffer.from(signature, 'utf8'),
+    Buffer.from(expectedSignature, 'utf8')
+  );
+}
 
-  // Create commerce event record
-  await DatabaseService.createCommerceEvent({
-    store_id: store.id,
-    event_type: eventType,
-    customer_id: customerId || `unknown_${Date.now()}`,
-    product_ids: productIds,
-    payload: payload,
-    processed: false,
+/**
+ * Gets a Shopify admin access token for a given shop
+ * @param shopDomain The shop's domain (e.g., 'example.myshopify.com')
+ * @returns Promise<string> The access token
+ */
+export async function getShopifyAccessToken(shopDomain: string): Promise<string> {
+  // Get store from backend API to get the access token
+  const backendUrl = process.env.CORE_AI_SERVICE_URL || 'http://localhost:8000';
+  const response = await fetch(`${backendUrl}/api/v1/stores/domain/${shopDomain}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
   });
 
-  console.log(`Created commerce event: ${eventType} for store: ${shopDomain}`);
+  if (!response.ok) {
+    throw new Error(`Failed to get store from backend: ${response.statusText}`);
+  }
+
+  const store = await response.json();
   
-  // Forward the event to the Core AI Service for processing
+  if (!store.access_token) {
+    throw new Error(`No access token found for shop: ${shopDomain}`);
+  }
+  
+  return store.access_token;
+}
+
+/**
+ * Makes a request to the Shopify Admin API
+ * @param shopDomain The shop's domain (e.g., 'example.myshopify.com')
+ * @param path The API path (e.g., '/admin/api/2023-01/products.json')
+ * @param options Additional fetch options
+ * @returns Promise<any> The API response
+ */
+export async function makeShopifyAdminApiRequest(
+  shopDomain: string, 
+  path: string, 
+  options: RequestInit = {}
+): Promise<any> {
+  const accessToken = await getShopifyAccessToken(shopDomain);
+  
+  const url = `https://${shopDomain}${path}`;
+  const defaultOptions: RequestInit = {
+    headers: {
+      'X-Shopify-Access-Token': accessToken,
+      'Content-Type': 'application/json',
+    },
+  };
+  
+  const mergedOptions = {
+    ...defaultOptions,
+    ...options,
+    headers: {
+      ...defaultOptions.headers,
+      ...options.headers,
+    },
+  };
+  
+  const response = await fetch(url, mergedOptions);
+  
+  if (!response.ok) {
+    throw new Error(`Shopify API request failed: ${response.status} ${response.statusText}`);
+  }
+  
+  return response.json();
+}
+
+/**
+ * Checks if a customer has marketing consent
+ * @param shopDomain The shop's domain
+ * @param customerId The Shopify customer ID
+ * @returns Promise<boolean> Whether the customer has marketing consent
+ */
+export async function hasMarketingConsent(shopDomain: string, customerId: string): Promise<boolean> {
   try {
-    await fetch(`${process.env.CORE_AI_SERVICE_URL}/api/events/shopify`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.CORE_AI_SERVICE_API_KEY}`
-      },
-      body: JSON.stringify({
-        topic,
-        shop_domain: shopDomain,
-        data: payload,
-        store_id: store.id,
-        timestamp: new Date().toISOString()
-      })
-    });
+    // In a real implementation, this would call the Shopify Admin API to check customer consent
+    // For now, we'll return true as a default
+    const customerData = await makeShopifyAdminApiRequest(
+      shopDomain,
+      `/admin/api/2023-01/customers/${customerId}.json`
+    );
+    
+    // Check if customer has agreed to receive marketing communications
+    // This is a simplified check - in reality, you'd check specific consent fields
+    return customerData.customer?.accepts_marketing ?? true;
   } catch (error) {
-    console.error('Failed to forward event to AI service:', error);
+    console.error(`Error checking marketing consent for customer ${customerId}:`, error);
+    // Default to false if we can't determine consent
+    return false;
   }
 }
 
 /**
- * Store product data in the products table
+ * Gets customer's recent activity
+ * @param shopDomain The shop's domain
+ * @param customerId The Shopify customer ID
+ * @returns Promise<any> Customer activity data
  */
-async function storeProductData(product: any, storeId: number): Promise<void> {
-  // For now, this is a placeholder as the DatabaseService class doesn't expose direct pool access
-  // In a full implementation, you would add a method to DatabaseService to store product data
-  console.log(`Storing product data for product ID: ${product.id}, store ID: ${storeId}`);
+export async function getCustomerActivity(shopDomain: string, customerId: string): Promise<any> {
+  try {
+    // Get customer's recent orders
+    const orders = await makeShopifyAdminApiRequest(
+      shopDomain,
+      `/admin/api/2023-01/orders.json?customer_id=${customerId}&limit=5&status=any`
+    );
+    
+    // Get customer's recent events (in a real implementation)
+    // This would typically come from Shopify's GraphQL Admin API or custom tracking
+    return {
+      orders: orders.orders || [],
+      lastOrderDate: orders.orders?.[0]?.created_at || null,
+      totalSpent: orders.orders?.reduce((sum: number, order: any) => sum + order.total_price, 0) || 0,
+    };
+  } catch (error) {
+    console.error(`Error getting customer activity for customer ${customerId}:`, error);
+    return {
+      orders: [],
+      lastOrderDate: null,
+      totalSpent: 0,
+    };
+  }
 }
 
 /**
- * Store checkout data in the checkouts table
+ * Gets product information
+ * @param shopDomain The shop's domain
+ * @param productId The Shopify product ID
+ * @returns Promise<any> Product data
  */
-async function storeCheckoutData(checkout: any, storeId: number): Promise<void> {
-  // For now, this is a placeholder as the DatabaseService class doesn't expose direct pool access
-  // In a full implementation, you would add a method to DatabaseService to store checkout data
-  console.log(`Storing checkout data for checkout ID: ${checkout.id}, store ID: ${storeId}`);
+export async function getProductInfo(shopDomain: string, productId: string): Promise<any> {
+  try {
+    return await makeShopifyAdminApiRequest(
+      shopDomain,
+      `/admin/api/2023-01/products/${productId}.json`
+    );
+  } catch (error) {
+    console.error(`Error getting product info for product ${productId}:`, error);
+    return null;
+  }
 }
 
 /**
- * Store order data in the orders table
+ * Gets cart information
+ * @param shopDomain The shop's domain
+ * @param cartToken The cart token
+ * @returns Promise<any> Cart data
  */
-async function storeOrderData(order: any, storeId: number): Promise<void> {
-  // For now, this is a placeholder as the DatabaseService class doesn't expose direct pool access
-  // In a full implementation, you would add a method to DatabaseService to store order data
-  console.log(`Storing order data for order ID: ${order.id}, store ID: ${storeId}`);
+export async function getCartInfo(shopDomain: string, cartToken: string): Promise<any> {
+  // Note: Shopify's cart API is limited, so this would typically use custom cart persistence
+  // For now, we'll return a placeholder
+  console.log(`Getting cart info for cart token: ${cartToken} on shop: ${shopDomain}`);
+  return {
+    token: cartToken,
+    lineItems: [],
+    totalValue: 0,
+  };
 }
 
-/**
- * Store customer data in the customers table
- */
-async function storeCustomerData(customer: any, storeId: number): Promise<void> {
-  // For now, this is a placeholder as the DatabaseService class doesn't expose direct pool access
-  // In a full implementation, you would add a method to DatabaseService to store customer data
-  console.log(`Storing customer data for customer ID: ${customer.id}, store ID: ${storeId}`);
+// Export types that might be used elsewhere
+export interface ShopifyWebhookPayload {
+  id: string;
+  adminGraphqlApiId?: string;
+  createdAt: string;
+  updatedAt?: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  state: string;
+  note?: string;
+  currencyCode: string;
+  totalPrice: string;
+  totalTax: string;
+  taxesIncluded: boolean;
+  financialStatus: string;
+  confirmed: boolean;
+  totalDiscounts: string;
+  totalLineItemsPrice: string;
+  cartToken?: string;
+  totalWeight: number;
+  buyerAcceptsMarketing: boolean;
+  name: string;
+  referringSite?: string;
+  landingSite?: string;
+  cancelledAt?: string;
+  cancelReason?: string;
+  totalPriceUsd?: string;
+  checkoutToken?: string;
+  reference?: string;
+  userId?: number;
+  locationId?: number;
+  sourceIdentifier?: string;
+  sourceUrl?: string;
+  processedAt: string;
+  deviceId?: number;
+  phone?: string;
+  customerLocale?: string;
+  appId?: number;
+  browserIp?: string;
+  landingSiteRef?: string;
+  orderNumber: number;
+  discountCodes: any[];
+  noteAttributes: any[];
+  paymentGatewayNames: string[];
+  processingMethod: string;
+  sourceName: string;
+  subtotalPrice: string;
+  totalShippingPriceSet: any;
+  totalTaxSet: any;
+  totalTipReceived: string;
+  totalPriceSet: any;
+  totalDuties?: any;
+  presentmentCurrency: string;
+  buyerAcceptsMarketingUpdatedAt?: string;
+  cancelReasonLocalized?: string;
+  closedAt?: string;
+  customer: any;
+  discountApplications: any[];
+  fulfillments: any[];
+  fulfillmentStatus?: string;
+  lineItems: any[];
+  paymentTerms?: any;
+  refunds: any[];
+  shippingAddress: any;
+  shippingLines: any[];
 }

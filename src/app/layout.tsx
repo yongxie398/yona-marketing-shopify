@@ -1,8 +1,10 @@
 import './globals.css';
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import ClientWrapper from './ClientWrapper';
+import '@shopify/polaris/build/esm/styles.css';
 
-const inter = Inter({ subsets: ['latin'] });
+// Use default font to avoid network requests
+const inter = { className: '' }; // Using system font stack from CSS
 
 export const metadata: Metadata = {
   title: 'AI Revenue Agent for Shopify',
@@ -17,14 +19,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <div className="app-container">
-          <header className="app-header">
-            <h1>AI Revenue Agent</h1>
-          </header>
-          <main className="app-main">
-            {children}
-          </main>
-        </div>
+        <ClientWrapper>
+          {children}
+        </ClientWrapper>
       </body>
     </html>
   );

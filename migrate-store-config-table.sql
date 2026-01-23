@@ -3,7 +3,7 @@
 
 -- Add configuration fields to stores table if they don't exist
 ALTER TABLE stores 
-ADD COLUMN IF NOT EXISTS brand_voice VARCHAR(50) DEFAULT 'friendly',
+ADD COLUMN IF NOT EXISTS brand_tone VARCHAR(50) DEFAULT 'friendly',
 ADD COLUMN IF NOT EXISTS frequency_caps JSONB DEFAULT '{"daily": 1, "weekly": 3}',
 ADD COLUMN IF NOT EXISTS paused BOOLEAN DEFAULT FALSE,
 ADD COLUMN IF NOT EXISTS config_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;

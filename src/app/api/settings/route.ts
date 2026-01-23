@@ -1,90 +1,161 @@
 import { NextRequest } from 'next/server';
-import { DatabaseService } from '@/lib/db';
+import logger from '@/utils/logger';
 
 export async function GET(request: NextRequest) {
   try {
-    // Extract shop domain from query parameters
     const url = new URL(request.url);
     const shopDomain = url.searchParams.get('shop');
 
     if (!shopDomain) {
-      return Response.json(
-        { error: 'Shop domain is required' }, 
-        { status: 400 }
-      );
+      return new Response(JSON.stringify({ error: 'Shop parameter is required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
-    // Get store from database
-    const store = await DatabaseService.getStoreByDomain(shopDomain);
-    if (!store) {
-      return Response.json(
-        { error: 'Store not found' }, 
-        { status: 404 }
-      );
+    // Get store from backend API
+    const backendUrl = process.env.CORE_AI_SERVICE_URL || 'http://localhost:8000';
+    const response = await fetch(`${backendUrl}/api/v1/stores/domain/${shopDomain}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      return new Response(JSON.stringify({ error: 'Store not found' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
-    // Get settings from the stores table which already contains configuration fields
-    const settings = {
-      brand_voice: store.brand_voice,
-      frequency_caps: store.frequency_caps,
+    const store = await response.json();
+
+    // Return the store configuration
+    const storeConfig = {
+      brandTone: store.brand_tone,
+      frequencyCaps: store.frequency_caps,
       paused: store.paused,
+      name: store.name,
+      domain: store.domain,
+      status: store.status,
+      currency: store.currency,
+      configUpdatedAt: store.config_updated_at,
     };
-    
-    return Response.json(settings);
-  } catch (error) {
-    console.error('Error fetching settings:', error);
-    return Response.json(
-      { error: 'Internal server error' }, 
-      { status: 500 }
-    );
+
+    return new Response(JSON.stringify(storeConfig), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch (error: any) {
+    logger.error('Error fetching store settings:', error);
+    return new Response(JSON.stringify({ error: 'Failed to fetch store settings' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    // Extract shop domain from query parameters
     const url = new URL(request.url);
     const shopDomain = url.searchParams.get('shop');
 
     if (!shopDomain) {
-      return Response.json(
-        { error: 'Shop domain is required' }, 
-        { status: 400 }
-      );
+      return new Response(JSON.stringify({ error: 'Shop parameter is required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
-    // Parse request body
-    const { brand_voice, frequency_caps, paused } = await request.json();
+    const updates = await request.json();
 
-    // Get store from database
-    const store = await DatabaseService.getStoreByDomain(shopDomain);
-    if (!store) {
-      return Response.json(
-        { error: 'Store not found' }, 
-        { status: 404 }
-      );
-    }
-
-    // Update settings in the stores table which already contains configuration fields
-    const updateSettingsQuery = `
-      UPDATE stores 
-      SET brand_voice = $1, frequency_caps = $2, paused = $3, config_updated_at = CURRENT_TIMESTAMP
-      WHERE id = $4
-    `;
-    
-    const client = await DatabaseService.getClient();
-    await client.query(updateSettingsQuery, [brand_voice, frequency_caps, paused, store.id]);
-    client.release();
-
-    return Response.json({
-      success: true,
-      message: 'Settings updated successfully'
+    // Update store via backend API
+    const backendUrl = process.env.CORE_AI_SERVICE_URL || 'http://localhost:8000';
+    const response = await fetch(`${backendUrl}/api/v1/stores/domain/${shopDomain}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        brand_tone: updates.brandTone,
+        frequency_caps: updates.frequencyCaps,
+        paused: updates.paused,
+        name: updates.name,
+        status: updates.status,
+        currency: updates.currency,
+        config_updated_at: new Date().toISOString(),
+      }),
     });
-  } catch (error) {
-    console.error('Error saving settings:', error);
-    return Response.json(
-      { error: 'Internal server error' }, 
-      { status: 500 }
-    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error(`Failed to update store via backend API: ${errorText}`);
+      return new Response(JSON.stringify({ error: 'Failed to update store settings' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    const updatedStore = await response.json();
+
+    return new Response(JSON.stringify({
+      message: 'Settings updated successfully',
+      store: updatedStore
+    }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch (error: any) {
+    logger.error('Error updating store settings:', error);
+    return new Response(JSON.stringify({ error: 'Failed to update store settings' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const url = new URL(request.url);
+    const shopDomain = url.searchParams.get('shop');
+
+    if (!shopDomain) {
+      return new Response(JSON.stringify({ error: 'Shop parameter is required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Delete store via backend API
+    const backendUrl = process.env.CORE_AI_SERVICE_URL || 'http://localhost:8000';
+    const response = await fetch(`${backendUrl}/api/v1/stores/domain/${shopDomain}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error(`Failed to delete store via backend API: ${errorText}`);
+      return new Response(JSON.stringify({ error: 'Failed to delete store' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    const deletedStore = await response.json();
+
+    return new Response(JSON.stringify({
+      message: 'Store deleted successfully',
+      store: deletedStore
+    }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch (error: any) {
+    logger.error('Error deleting store:', error);
+    return new Response(JSON.stringify({ error: 'Failed to delete store' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 }

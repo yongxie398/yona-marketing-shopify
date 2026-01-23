@@ -14,40 +14,40 @@ export interface ShopifyAuthCallback {
 }
 
 export interface Store {
-  id: string; // UUID in the actual database
-  shop_domain: string;
-  shop_name: string;
+  id: string;
+  platform_store_id?: string; // Platform-specific store ID (e.g. Shopify's store ID)
+  tenant_id?: string; // Associated tenant ID from backend
+  domain: string;
+  name: string;
   access_token: string;
   hmac_secret: string;
-  brand_voice: string;
+  brand_tone: string;
   frequency_caps: {
     daily: number;
     weekly: number;
   };
-  paused: boolean;
+  status: string;
   created_at: Date;
-  updated_at: Date;
+  config_updated_at: Date;
 }
 
 export interface CommerceEvent {
   id: string;
-  store_id: number;
-  event_type: string;
+  store_id: string;
   customer_id: string;
-  product_ids: string[];
+  event_type: string;
+  occurred_at: Date;
   payload: any;
-  processed: boolean;
-  created_at: Date;
 }
 
 export interface AIDecision {
-  id: string;
-  store_id: number;
+  id: number;  // SERIAL in database becomes integer
+  store_id: string;
   customer_id: string;
   event_id: string;
   decision_type: string;
   campaign_type: string;
-  content_generated: string;
+  content_generated: boolean;
   scheduled_at: Date;
   executed_at?: Date;
   revenue_impact?: number;

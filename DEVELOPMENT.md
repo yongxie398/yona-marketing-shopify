@@ -70,10 +70,15 @@ The app will be available at http://localhost:3000
 
 The app receives real-time events from Shopify through webhooks:
 
-- `orders/create` - New order placed
-- `checkouts/update` - Checkout updates (for abandonment detection)
-- `customers/create` - New customer registration
+- `app/uninstalled` - App uninstalled
 - `products/create` - New product added
+- `products/update` - Product updated
+- `customers/create` - New customer registered
+- `customers/update` - Customer updated
+- `orders/create` - New order placed
+- `orders/update` - Order updated
+- `checkouts/create` - New checkout started
+- `checkouts/update` - Checkout updated (for abandonment detection)
 
 Webhook events are validated and forwarded to the Core AI Service for processing.
 
@@ -115,10 +120,13 @@ The Shopify App Service communicates with the Core AI Service through HTTP APIs:
 
 ### Required Scopes
 
-- `read_customers`
-- `read_products`
-- `read_orders`
-- `read_checkouts`
+- `read_customers`, `write_customers`
+- `read_products`, `write_products`
+- `read_orders`, `write_orders`
+- `read_checkouts`, `write_checkouts`
+- `read_marketing_events`, `write_marketing_events`
+- `read_content`, `read_analytics`
+- `read_script_tags`, `write_script_tags`
 
 ## Security
 

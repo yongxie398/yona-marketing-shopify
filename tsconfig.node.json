@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "node",
+
+    "target": "ES2020",
+    "esModuleInterop": true,
+
+    "isolatedModules": false,
+    "noEmit": false,
+
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true
+  },
+  "include": [
+    "src/workers/**/*.ts",
+    "src/monitoring/**/*.ts",
+    "src/lib/**/*.ts",
+    "src/utils/**/*.ts"
+  ]
+}

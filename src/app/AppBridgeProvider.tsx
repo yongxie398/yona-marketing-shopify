@@ -9,55 +9,113 @@ import { Redirect } from '@shopify/app-bridge/actions';
 // Custom hook to get session token for authenticated requests
 export const useSessionToken = () => {
   const appBridge = useAppBridge();
-  const [token, setToken] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(() => {
+    // Try to get token from sessionStorage first (persists across navigation)
+    if (typeof window !== 'undefined') {
+      const storedToken = sessionStorage.getItem('shopify_session_token');
+      if (storedToken) {
+        console.log('useSessionToken: Found token in sessionStorage, length =', storedToken.length);
+        return storedToken;
+      }
+    }
+    return null;
+  });
 
   useEffect(() => {
-    if (!appBridge) return;
+    console.log('useSessionToken: appBridge =', appBridge, 'type:', typeof appBridge);
+    
+    // Check for id_token in URL first - this is the JWT from Shopify OAuth
+    const urlParams = new URLSearchParams(window.location.search);
+    const idToken = urlParams.get('id_token');
+    const session = urlParams.get('session');
+    const shop = urlParams.get('shop');
+    const host = urlParams.get('host');
+    
+    console.log('useSessionToken: URL params check:', {
+      hasIdToken: !!idToken,
+      hasSession: !!session,
+      hasShop: !!shop,
+      hasHost: !!host,
+      idTokenLength: idToken?.length,
+      currentToken: token ? 'present' : 'null'
+    });
+    
+    // If we have id_token in URL, use it directly as the session token
+    if (idToken) {
+      console.log('useSessionToken: Using id_token from URL directly, length =', idToken.length);
+      sessionStorage.setItem('shopify_session_token', idToken);
+      setToken(idToken);
+      return;
+    }
+    
+    // If we have session in URL, use it
+    if (session) {
+      console.log('useSessionToken: Using session from URL, length =', session.length);
+      sessionStorage.setItem('shopify_session_token', session);
+      setToken(session);
+      return;
+    }
+    
+    // If we already have a token (from sessionStorage), don't fetch again
+    if (token) {
+      console.log('useSessionToken: Already have token from sessionStorage');
+      return;
+    }
+    
+    // No token available - need to re-authenticate
+    if (shop && host && appBridge) {
+      console.log('useSessionToken: No token available, redirecting to OAuth...');
+      const redirect = Redirect.create(appBridge);
+      const redirectUri = `${window.location.origin}/api/auth/callback`;
+      const authUrl = `https://${shop}/admin/oauth/authorize?client_id=${process.env.NEXT_PUBLIC_SHOPIFY_API_KEY}&scope=read_customers,write_customers,read_orders,write_orders,read_products,write_products,read_checkouts,write_checkouts,read_marketing_events,write_marketing_events,read_content,read_analytics,read_script_tags,write_script_tags&redirect_uri=${encodeURIComponent(redirectUri)}`;
+      redirect.dispatch(Redirect.Action.REMOTE, authUrl);
+      return;
+    }
+    
+    if (!appBridge) {
+      console.log('useSessionToken: appBridge not available yet');
+      return;
+    }
 
+    // Only try App Bridge session token if no token available
+    let cancelled = false;
+    
     const fetchToken = async () => {
+      if (cancelled) return;
+      
       try {
-        const sessionToken = await getSessionToken(appBridge);
-        setToken(sessionToken);
+        console.log('useSessionToken: Fetching session token via App Bridge...');
+        
+        const timeoutPromise = new Promise<null>((_, reject) => {
+          setTimeout(() => reject(new Error('Session token fetch timeout after 10s')), 10000);
+        });
+        
+        const sessionToken = await Promise.race([
+          getSessionToken(appBridge),
+          timeoutPromise
+        ]) as string;
+        
+        if (!cancelled && sessionToken) {
+          console.log('useSessionToken: Token received via App Bridge, length =', sessionToken.length);
+          sessionStorage.setItem('shopify_session_token', sessionToken);
+          setToken(sessionToken);
+        }
       } catch (error) {
-        console.error('Error fetching session token:', error);
+        if (!cancelled) {
+          console.error('useSessionToken: Failed to fetch session token:', error);
+        }
       }
     };
 
-    fetchToken();
-
-    // Refresh token periodically (Shopify tokens expire after 1 hour)
-    const interval = setInterval(fetchToken, 30 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [appBridge]);
+    const initTimeout = setTimeout(fetchToken, 500);
+    
+    return () => {
+      cancelled = true;
+      clearTimeout(initTimeout);
+    };
+  }, [appBridge, token]);
 
   return token;
-};
-
-// Auth redirect handler component that uses App Bridge
-const AuthRedirectHandler = () => {
-  const appBridge = useAppBridge();
-
-  useEffect(() => {
-    if (!appBridge) return;
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const host = urlParams.get('host');
-    const shop = urlParams.get('shop');
-    
-    if (!host && shop) {
-      try {
-        const redirect = Redirect.create(appBridge);
-        redirect.dispatch(
-          Redirect.Action.REMOTE,
-          `/api/auth/begin?shop=${encodeURIComponent(shop)}`
-        );
-      } catch (error) {
-        console.error('Error creating redirect:', error);
-      }
-    }
-  }, [appBridge]);
-
-  return null;
 };
 
 export default function AppBridgeProvider({ children }: { children: React.ReactNode }) {
@@ -78,6 +136,13 @@ export default function AppBridgeProvider({ children }: { children: React.ReactN
         const host = urlParams.get('host');
         const shop = urlParams.get('shop');
         
+        console.log('AppBridgeProvider initialization:', {
+          host: host ? `${host.substring(0, 20)}...` : null,
+          shop,
+          isInIframe: window.self !== window.top,
+          currentUrl: window.location.href
+        });
+        
         if (!host && !shop) {
           // If both host and shop are missing, show friendly error
           throw new Error('Please open this app from the Shopify Admin for Yona Test Store.');
@@ -86,6 +151,8 @@ export default function AppBridgeProvider({ children }: { children: React.ReactN
         // If host is present, create App Bridge config
         if (host) {
           const apiKey = process.env.NEXT_PUBLIC_SHOPIFY_API_KEY;
+          console.log('Creating App Bridge config with API key:', apiKey ? 'present' : 'missing');
+          
           if (!apiKey) {
             throw new Error('Shopify API key not configured');
           }
@@ -97,28 +164,28 @@ export default function AppBridgeProvider({ children }: { children: React.ReactN
             theme: 'light',
           };
 
+          console.log('App Bridge config created, setting config...');
           setConfig(appBridgeConfig);
           setError(null);
         } else if (shop) {
-          // If host is missing but shop is present,
-          // we'll handle redirect in AuthRedirectHandler
-          // which has access to App Bridge
-          const apiKey = process.env.NEXT_PUBLIC_SHOPIFY_API_KEY;
-          if (!apiKey) {
-            throw new Error('Shopify API key not configured');
+          // If host is missing but shop is present, redirect to OAuth
+          // Check if we're in an iframe (embedded in Shopify admin)
+          const isInIframe = window.self !== window.top;
+          const redirectUrl = `/api/auth/begin?shop=${encodeURIComponent(shop)}`;
+          
+          console.log('No host param, redirecting to OAuth:', {
+            isInIframe,
+            redirectUrl
+          });
+          
+          if (isInIframe) {
+            // Redirect parent window to break out of iframe
+            window.parent.location.href = redirectUrl;
+          } else {
+            // Direct redirect for standalone access
+            window.location.href = redirectUrl;
           }
-
-          // Create minimal config to initialize App Bridge
-          // We'll handle redirect after initialization
-          const appBridgeConfig = {
-            apiKey,
-            host: 'temp', // Temporary host - will be replaced by redirect
-            forceRedirect: true,
-            theme: 'light',
-          };
-
-          setConfig(appBridgeConfig);
-          setError(null);
+          return;
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to initialize App Bridge');
@@ -176,7 +243,6 @@ export default function AppBridgeProvider({ children }: { children: React.ReactN
     return (
       <AppBridgeProviderReact config={config}>
         <PolarisAppProvider i18n={{}}>
-          <AuthRedirectHandler />
           {children}
         </PolarisAppProvider>
       </AppBridgeProviderReact>

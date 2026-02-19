@@ -31,6 +31,10 @@ export function getOptionalEnvVar(name: keyof EnvConfig, defaultValue?: string):
   return process.env[name] || defaultValue;
 }
 
+export function getAppUrl(): string {
+  return (process.env.SHOPIFY_APP_URL || '').replace(/\/$/, '');
+}
+
 // Validate required environment variables on startup
 export function validateEnvironment(): void {
   const requiredVars: (keyof EnvConfig)[] = [

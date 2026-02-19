@@ -27,7 +27,7 @@ describe('AICoreService', () => {
         customer_id: 'test-customer-456',
         store_id: 'test-store-123',
         occurred_at: new Date().toISOString(),
-        properties: { test: 'data' },
+        payload: { test: 'data' },
       };
       
       (fetch as jest.Mock).mockResolvedValue({
@@ -67,7 +67,7 @@ describe('AICoreService', () => {
         customer_id: 'test-customer-456',
         store_id: 'test-store-123',
         occurred_at: new Date().toISOString(),
-        properties: { test: 'data' },
+        payload: { test: 'data' },
       };
       
       const errorMessage = 'Internal Server Error';

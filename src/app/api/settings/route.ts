@@ -1,6 +1,24 @@
 import { NextRequest } from 'next/server';
 import logger from '@/utils/logger';
 
+const BACKEND_URL = process.env.CORE_AI_SERVICE_URL || 'http://localhost:8000';
+const API_TIMEOUT = 10000; // 10 seconds
+
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout = API_TIMEOUT): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url);
@@ -13,9 +31,10 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    logger.info(`Fetching settings for shop: ${shopDomain}`);
+
     // Get store from backend API
-    const backendUrl = process.env.CORE_AI_SERVICE_URL || 'http://localhost:8000';
-    const response = await fetch(`${backendUrl}/api/v1/stores/domain/${shopDomain}`, {
+    const response = await fetchWithTimeout(`${BACKEND_URL}/api/v1/stores/domain/${shopDomain}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -23,6 +42,7 @@ export async function GET(request: NextRequest) {
     });
 
     if (!response.ok) {
+      logger.error(`Backend returned ${response.status} for shop: ${shopDomain}`);
       return new Response(JSON.stringify({ error: 'Store not found' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json' },
@@ -33,8 +53,8 @@ export async function GET(request: NextRequest) {
 
     // Return the store configuration
     const storeConfig = {
-      brandTone: store.brand_tone,
-      frequencyCaps: store.frequency_caps,
+      brand_voice: store.brand_tone,
+      frequency_caps: store.frequency_caps,
       paused: store.paused,
       name: store.name,
       domain: store.domain,
@@ -69,16 +89,17 @@ export async function POST(request: NextRequest) {
 
     const updates = await request.json();
 
+    logger.info(`Updating settings for shop: ${shopDomain}`, { updates });
+
     // Update store via backend API
-    const backendUrl = process.env.CORE_AI_SERVICE_URL || 'http://localhost:8000';
-    const response = await fetch(`${backendUrl}/api/v1/stores/domain/${shopDomain}`, {
+    const response = await fetchWithTimeout(`${BACKEND_URL}/api/v1/stores/domain/${shopDomain}`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        brand_tone: updates.brandTone,
-        frequency_caps: updates.frequencyCaps,
+        brand_tone: updates.brand_voice || updates.brandTone,
+        frequency_caps: updates.frequency_caps || updates.frequencyCaps,
         paused: updates.paused,
         name: updates.name,
         status: updates.status,
@@ -126,8 +147,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Delete store via backend API
-    const backendUrl = process.env.CORE_AI_SERVICE_URL || 'http://localhost:8000';
-    const response = await fetch(`${backendUrl}/api/v1/stores/domain/${shopDomain}`, {
+    const response = await fetchWithTimeout(`${BACKEND_URL}/api/v1/stores/domain/${shopDomain}`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',

@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 import aiCoreService from '@/lib/ai-core-service';
 import eventQueue from '@/lib/event-queue';
 import logger from '@/utils/logger';
@@ -10,11 +10,11 @@ function verifySignature(payload: string, signature: string, secret: string): bo
   const expectedSignature = crypto
     .createHmac('sha256', secret)
     .update(payload)
-    .digest('base64');  // Use base64 format to match Shopify's format
+    .digest('base64');
   
   return crypto.timingSafeEqual(
-    Buffer.from(signature, 'utf8'),
-    Buffer.from(expectedSignature, 'utf8')
+    Buffer.from(signature, 'base64'),
+    Buffer.from(expectedSignature, 'base64')
   );
 }
 
@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
     // Extract headers
     const shop = request.headers.get('x-shopify-shop-domain');
     const signature = request.headers.get('x-shopify-hmac-sha256');
+    const topic = request.headers.get('x-shopify-topic');
     
     if (!shop) {
       return new Response('Missing shop domain', { status: 400 });
@@ -82,8 +83,6 @@ export async function POST(request: NextRequest) {
     const store = await storeResponse.json();
     
     // Handle specific webhook events
-    const topic = request.headers.get('x-shopify-topic');
-    
     if (topic === 'app/uninstalled') {
       // Update store status to uninstalled
       const updateResponse = await fetch(`${backendUrl}/api/v1/stores/domain/${shop}`, {

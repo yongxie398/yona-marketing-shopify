@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import crypto from 'crypto';
+import { getAppUrl } from '@/utils/env';
 
 export async function GET(request: NextRequest) {
   try {
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
     // For now, we'll pass it through the OAuth flow
     
     // Build OAuth authorization URL
-    const redirectUri = `${process.env.SHOPIFY_APP_URL}/api/auth/callback`;
+    const redirectUri = `${getAppUrl()}/api/auth/callback`;
     const scopes = [
       'read_customers', 'write_customers',
       'read_orders', 'write_orders',

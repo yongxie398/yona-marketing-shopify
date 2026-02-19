@@ -131,7 +131,7 @@ class EventQueue {
         event_type: event.eventType,
         store_id: event.storeId,
         occurred_at: new Date().toISOString(),
-        properties: event.payload
+        payload: event.payload
       });
 
       logger.debug(`Event ${event.eventId} forwarded to Core AI Service`, {

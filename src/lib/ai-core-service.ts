@@ -7,7 +7,7 @@ interface AICoreEvent {
   customer_id?: string;
   store_id: string;
   occurred_at: string;
-  properties: {
+  payload?: {
     [key: string]: any;
   };
 }

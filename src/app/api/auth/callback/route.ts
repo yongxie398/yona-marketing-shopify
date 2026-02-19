@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { NextRequest } from 'next/server';
-import env from '@/utils/env';
+import env, { getAppUrl } from '@/utils/env';
 import logger from '@/utils/logger';
 import aiCoreService from '@/lib/ai-core-service';
 
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
       context: 'AuthCallback',
       metadata: { urlShop: shop, sessionShop, sessionTokenPresent: !!sessionToken }
     });
-    redirect(`${env.SHOPIFY_APP_URL}?error=missing_shop`);
+    redirect(`${getAppUrl()}?error=missing_shop`);
   }
 
   // Normalize the shop domain
@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
           client_id: env.SHOPIFY_API_KEY,
           client_secret: env.SHOPIFY_API_SECRET,
           code: code,
-          redirect_uri: `${env.SHOPIFY_APP_URL}/api/auth/callback`,
+          redirect_uri: `${getAppUrl()}/api/auth/callback`,
         }).toString(),
       });
 
@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
           context: 'AuthCallback',
           metadata: { shop: normalizedShop, statusCode: oauthResponse.status }
         });
-        redirect(`${env.SHOPIFY_APP_URL}?error=oauth_failed`);
+        redirect(`${getAppUrl()}?error=oauth_failed`);
       }
 
       const oauthData = await oauthResponse.json();
@@ -157,7 +157,7 @@ export async function GET(request: NextRequest) {
           context: 'AuthCallback',
           metadata: { shop: normalizedShop, statusCode: registerResponse.status }
         });
-        redirect(`${env.SHOPIFY_APP_URL}?error=registration_failed`);
+        redirect(`${getAppUrl()}?error=registration_failed`);
       }
 
       const registeredStore = await registerResponse.json();
@@ -198,7 +198,7 @@ export async function GET(request: NextRequest) {
             body: JSON.stringify({
               webhook: {
                 topic: correctedTopic,
-                address: `${env.SHOPIFY_APP_URL}/api/webhooks`,
+                address: `${getAppUrl()}/api/webhooks`,
                 format: 'json',
               },
             }),
@@ -249,7 +249,7 @@ export async function GET(request: NextRequest) {
       });
 
       // Redirect to the app home page
-      redirect(`${env.SHOPIFY_APP_URL}/settings?shop=${normalizedShop}&host=${host}`);
+      redirect(`${getAppUrl()}/settings?shop=${normalizedShop}&host=${host}`);
     } catch (error: any) {
       // Check if this is a Next.js redirect, and if so, re-throw it
       if (error?.digest?.startsWith('NEXT_REDIRECT')) {
@@ -261,17 +261,17 @@ export async function GET(request: NextRequest) {
         error: error as Error,
         metadata: { shop: normalizedShop, errorMessage: error.message }
       });
-      redirect(`${env.SHOPIFY_APP_URL}?error=callback_error`);
+      redirect(`${getAppUrl()}?error=callback_error`);
     }
   } else if (sessionVerified) {
     // If we have a valid session token but no code, redirect to Shopify OAuth
-    const authUrl = `https://${normalizedShop}/admin/oauth/authorize?client_id=${env.SHOPIFY_API_KEY}&scope=read_products,write_products,read_orders,write_orders,read_customers,write_customers,read_themes,write_themes,read_script_tags,write_script_tags,read_inventory,write_inventory&redirect_uri=${encodeURIComponent(`${env.SHOPIFY_APP_URL}/api/auth/callback`)}`;
+    const authUrl = `https://${normalizedShop}/admin/oauth/authorize?client_id=${env.SHOPIFY_API_KEY}&scope=read_products,write_products,read_orders,write_orders,read_customers,write_customers,read_themes,write_themes,read_script_tags,write_script_tags,read_inventory,write_inventory&redirect_uri=${encodeURIComponent(`${getAppUrl()}/api/auth/callback`)}`;
     redirect(authUrl);
   } else {
     logger.error('Invalid session and no authorization code', {
       context: 'AuthCallback',
       metadata: { shop: normalizedShop, hasCode: !!code, sessionVerified }
     });
-    redirect(`${env.SHOPIFY_APP_URL}?error=invalid_session`);
+    redirect(`${getAppUrl()}?error=invalid_session`);
   }
 }

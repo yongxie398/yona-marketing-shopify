@@ -44,26 +44,6 @@ export function removeFromCache(key: string): void {
 }
 
 /**
- * Validates a Shopify webhook request by checking the HMAC signature
- * @param payload The raw payload string
- * @param signature The signature from the x-shopify-hmac-sha256 header
- * @param secret The webhook secret
- * @returns boolean indicating if the signature is valid
- */
-export function validateShopifyWebhook(payload: string, signature: string, secret: string): boolean {
-  const crypto = require('crypto'); // Dynamically import since it's not available in edge runtime
-  const expectedSignature = 'sha256=' + crypto
-    .createHmac('sha256', secret)
-    .update(payload)
-    .digest('hex');
-  
-  return crypto.timingSafeEqual(
-    Buffer.from(signature, 'utf8'),
-    Buffer.from(expectedSignature, 'utf8')
-  );
-}
-
-/**
  * Gets a Shopify admin access token for a given shop
  * @param shopDomain The shop's domain (e.g., 'example.myshopify.com')
  * @returns Promise<string> The access token

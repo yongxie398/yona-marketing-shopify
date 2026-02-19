@@ -23,14 +23,22 @@ export default function SettingsPage() {
     weekly: 3
   });
   const [paused, setPaused] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [saving, setSaving] = useState<boolean>(false);
   const [shopDomain, setShopDomain] = useState<string | null>(null);
+  const [initialLoadComplete, setInitialLoadComplete] = useState<boolean>(false);
   const sessionToken = useSessionToken();
+
+  // Debug log for session token
+  useEffect(() => {
+    console.log('Settings page - sessionToken:', sessionToken ? 'present' : 'null');
+  }, [sessionToken]);
 
   // Extract shop domain from URL on component mount
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const domain = urlParams.get('shop');
+    console.log('Settings page - shop domain:', domain);
     setShopDomain(domain);
   }, []);
 
@@ -39,11 +47,16 @@ export default function SettingsPage() {
     const loadSettings = async () => {
       try {
         setLoading(true);
-        if (!shopDomain || !sessionToken) {
-          console.error('Missing shop domain or session token');
+        if (!shopDomain) {
+          console.log('No shop domain found');
           return;
         }
         
+        if (!sessionToken) {
+          console.log('Waiting for session token...');
+          return;
+        }
+
         const response = await fetch(`/api/settings?shop=${encodeURIComponent(shopDomain)}`, {
           method: 'GET',
           headers: {
@@ -51,7 +64,7 @@ export default function SettingsPage() {
             'Content-Type': 'application/json',
           },
         });
-        
+
         if (response.ok) {
           const data = await response.json();
           setBrandVoice(data.brand_voice);
@@ -75,11 +88,20 @@ export default function SettingsPage() {
         setPaused(false);
       } finally {
         setLoading(false);
+        setInitialLoadComplete(true); // Mark initial load as complete
       }
     };
 
     if (shopDomain && sessionToken) {
       loadSettings();
+    }
+  }, [shopDomain, sessionToken]);
+
+  // Separate effect to handle loading state when dependencies change
+  useEffect(() => {
+    if (shopDomain && sessionToken) {
+      // We have what we need, initial load is complete
+      setInitialLoadComplete(true);
     }
   }, [shopDomain, sessionToken]);
 
@@ -89,7 +111,7 @@ export default function SettingsPage() {
       return;
     }
 
-    setLoading(true);
+    setSaving(true);
     try {
       const response = await fetch(`/api/settings?shop=${encodeURIComponent(shopDomain)}`, {
         method: 'POST',
@@ -103,7 +125,7 @@ export default function SettingsPage() {
           paused,
         }),
       });
-      
+
       if (response.ok) {
         alert('Settings saved successfully!');
       } else {
@@ -114,7 +136,7 @@ export default function SettingsPage() {
       console.error('Error saving settings:', error);
       alert('Error saving settings');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
@@ -130,22 +152,46 @@ export default function SettingsPage() {
     setFrequencyCaps(prev => ({ ...prev, weekly: parseInt(value) || 3 }));
   };
 
+  const handleBackToHome = () => {
+    console.log('handleBackToHome called', { shopDomain });
+    
+    if (shopDomain) {
+      const host = new URLSearchParams(window.location.search).get('host') || '';
+      const homeUrl = `/?shop=${encodeURIComponent(shopDomain)}&host=${encodeURIComponent(host)}`;
+      console.log('Navigating to:', homeUrl);
+      window.location.href = homeUrl;
+    } else {
+      console.log('No shop domain available');
+    }
+  };
+
+  console.log('Settings page render state:', {
+    shopDomain,
+    sessionToken: sessionToken ? 'present' : 'null',
+    saving,
+    buttonDisabled: !shopDomain || !sessionToken || saving
+  });
+
   return (
     <Page
       title="AI Revenue Agent Settings"
       primaryAction={
-        <Button onClick={handleSaveSettings} loading={loading}>
-          {loading ? 'Saving...' : 'Save Settings'}
+        <Button 
+          onClick={handleSaveSettings} 
+          loading={saving}
+          disabled={!shopDomain || !sessionToken || saving}
+        >
+          {saving ? 'Saving...' : 'Save Settings'}
         </Button>
       }
     >
       <div style={{ padding: '1rem', marginBottom: '1rem' }}>
-        <a 
-          href={shopDomain ? `/?shop=${encodeURIComponent(shopDomain)}` : '/'} 
-          style={{ color: '#008060', textDecoration: 'none' }}
+        <Button 
+          onClick={handleBackToHome}
+          variant="plain"
         >
           ← Back to Home
-        </a>
+        </Button>
       </div>
       <Layout>
         <Layout.Section>
@@ -167,7 +213,7 @@ export default function SettingsPage() {
                   onChange={handleBrandVoiceChange}
                   helpText="Select the tone of voice for AI-generated messages"
                 />
-                
+
                 <FormLayout.Group>
                   <div>
                     <label>Daily Frequency Cap</label>
@@ -188,7 +234,7 @@ export default function SettingsPage() {
                       Maximum messages per customer per day
                     </p>
                   </div>
-                  
+
                   <div>
                     <label>Weekly Frequency Cap</label>
                     <input
@@ -209,7 +255,7 @@ export default function SettingsPage() {
                     </p>
                   </div>
                 </FormLayout.Group>
-                
+
                 <Checkbox
                   label="Pause AI Agent"
                   checked={paused}
@@ -219,7 +265,7 @@ export default function SettingsPage() {
               </FormLayout>
             </div>
           </Card>
-          
+
           <div style={{ marginTop: '1rem' }}>
             <Card>
               <div style={{ padding: '1rem', fontWeight: 'bold', fontSize: '1.2rem' }}>

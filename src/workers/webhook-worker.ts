@@ -129,7 +129,7 @@ async function forwardToCoreAIWithCircuitBreakerAndRetry(item: typeof webhookQue
           event_type: item.topic,
           store_id: item.shopDomain, // or actual store ID if available
           occurred_at: item.timestamp,
-          properties: item.payload
+          payload: item.payload
         });
       });
       

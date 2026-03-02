@@ -51,16 +51,10 @@ export default function SettingsPage() {
           console.log('No shop domain found');
           return;
         }
-        
-        if (!sessionToken) {
-          console.log('Waiting for session token...');
-          return;
-        }
 
         const response = await fetch(`/api/settings?shop=${encodeURIComponent(shopDomain)}`, {
           method: 'GET',
           headers: {
-            'Authorization': `Bearer ${sessionToken}`,
             'Content-Type': 'application/json',
           },
         });
@@ -92,33 +86,39 @@ export default function SettingsPage() {
       }
     };
 
-    if (shopDomain && sessionToken) {
+    if (shopDomain) {
       loadSettings();
     }
-  }, [shopDomain, sessionToken]);
+  }, [shopDomain]);
 
   // Separate effect to handle loading state when dependencies change
   useEffect(() => {
-    if (shopDomain && sessionToken) {
+    if (shopDomain) {
       // We have what we need, initial load is complete
       setInitialLoadComplete(true);
     }
-  }, [shopDomain, sessionToken]);
+  }, [shopDomain]);
 
   const handleSaveSettings = async () => {
-    if (!shopDomain || !sessionToken) {
-      alert('Authentication required to save settings');
+    if (!shopDomain) {
+      alert('Shop domain is required');
       return;
     }
 
     setSaving(true);
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      
+      // Add authorization header if session token is available
+      if (sessionToken) {
+        headers['Authorization'] = `Bearer ${sessionToken}`;
+      }
+      
       const response = await fetch(`/api/settings?shop=${encodeURIComponent(shopDomain)}`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${sessionToken}`,
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           brand_voice: brandVoice,
           frequency_caps: frequencyCaps,
@@ -156,8 +156,18 @@ export default function SettingsPage() {
     console.log('handleBackToHome called', { shopDomain });
     
     if (shopDomain) {
-      const host = new URLSearchParams(window.location.search).get('host') || '';
-      const homeUrl = `/?shop=${encodeURIComponent(shopDomain)}&host=${encodeURIComponent(host)}`;
+      const urlParams = new URLSearchParams(window.location.search);
+      const host = urlParams.get('host') || '';
+      const idToken = urlParams.get('id_token');
+      const session = urlParams.get('session');
+      
+      let homeUrl = `/?shop=${encodeURIComponent(shopDomain)}&host=${encodeURIComponent(host)}`;
+      if (idToken) {
+        homeUrl += `&id_token=${encodeURIComponent(idToken)}`;
+      } else if (session) {
+        homeUrl += `&session=${encodeURIComponent(session)}`;
+      }
+      
       console.log('Navigating to:', homeUrl);
       window.location.href = homeUrl;
     } else {
@@ -169,7 +179,7 @@ export default function SettingsPage() {
     shopDomain,
     sessionToken: sessionToken ? 'present' : 'null',
     saving,
-    buttonDisabled: !shopDomain || !sessionToken || saving
+    buttonDisabled: !shopDomain || saving
   });
 
   return (
@@ -179,7 +189,7 @@ export default function SettingsPage() {
         <Button 
           onClick={handleSaveSettings} 
           loading={saving}
-          disabled={!shopDomain || !sessionToken || saving}
+          disabled={!shopDomain || saving}
         >
           {saving ? 'Saving...' : 'Save Settings'}
         </Button>
@@ -190,7 +200,7 @@ export default function SettingsPage() {
           onClick={handleBackToHome}
           variant="plain"
         >
-          ← Back to Home
+          ← Back to Dashboard
         </Button>
       </div>
       <Layout>
@@ -265,6 +275,40 @@ export default function SettingsPage() {
               </FormLayout>
             </div>
           </Card>
+
+          <div style={{ marginTop: '1rem' }}>
+            <Card>
+              <div style={{ padding: '1rem', fontWeight: 'bold', fontSize: '1.2rem' }}>
+                Billing & Subscription
+              </div>
+              <div style={{ padding: '0 1rem 1rem 1rem' }}>
+                <TextContainer>
+                  <div style={{ marginBottom: '1rem' }}>
+                    View your current plan, recovered revenue, and billing details.
+                  </div>
+                  <Button
+                    onClick={() => {
+                      const urlParams = new URLSearchParams(window.location.search);
+                      const host = urlParams.get('host') || '';
+                      const idToken = urlParams.get('id_token');
+                      const session = urlParams.get('session');
+                      
+                      let billingUrl = `/billing?shop=${encodeURIComponent(shopDomain || '')}&host=${encodeURIComponent(host)}`;
+                      if (idToken) {
+                        billingUrl += `&id_token=${encodeURIComponent(idToken)}`;
+                      } else if (session) {
+                        billingUrl += `&session=${encodeURIComponent(session)}`;
+                      }
+                      
+                      window.location.href = billingUrl;
+                    }}
+                  >
+                    View Billing Dashboard
+                  </Button>
+                </TextContainer>
+              </div>
+            </Card>
+          </div>
 
           <div style={{ marginTop: '1rem' }}>
             <Card>

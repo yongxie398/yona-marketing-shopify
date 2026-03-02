@@ -30,11 +30,23 @@ export async function GET(request: NextRequest) {
   const code = url.searchParams.get('code');
   const state = url.searchParams.get('state');
   const host = url.searchParams.get('host');
+  const idToken = url.searchParams.get('id_token');
+  const session = url.searchParams.get('session');
   const sessionToken = request.headers.get('authorization')?.replace('Bearer ', '');
 
   logger.info('Auth callback received', {
     context: 'AuthCallback',
-    metadata: { shop, hasCode: !!code, hasState: !!state, hasHost: !!host, hasSessionToken: !!sessionToken }
+    metadata: { 
+      shop, 
+      hasCode: !!code, 
+      hasState: !!state, 
+      hasHost: !!host, 
+      hasSessionToken: !!sessionToken,
+      hasIdToken: !!idToken,
+      hasSession: !!session,
+      idTokenLength: idToken?.length,
+      sessionLength: session?.length
+    }
   });
 
   // Verify the session token if present
@@ -166,11 +178,11 @@ export async function GET(request: NextRequest) {
           metadata: { shop: normalizedShop, storeId: registeredStore.id, platformStoreId: registeredStore.platform_store_id }
       });
 
-      // Set the session cookie
-      cookies().set('shop', normalizedShop, { secure: true, httpOnly: true, sameSite: 'strict' });
+      // Set the session cookie - use 'lax' for better Shopify OAuth compatibility
+      cookies().set('shop', normalizedShop, { secure: true, httpOnly: true, sameSite: 'lax' });
       
       // Set the access token in a secure cookie (in production, consider storing in database)
-      cookies().set('accessToken', accessToken, { secure: true, httpOnly: true, sameSite: 'strict' });
+      cookies().set('accessToken', accessToken, { secure: true, httpOnly: true, sameSite: 'lax' });
 
       // Register webhooks with Shopify
       const webhooksToRegister = [
@@ -248,8 +260,36 @@ export async function GET(request: NextRequest) {
         metadata: { shop: normalizedShop }
       });
 
-      // Redirect to the app home page
-      redirect(`${getAppUrl()}/settings?shop=${normalizedShop}&host=${host}`);
+      // Check if this is a new store that needs onboarding
+      // New stores won't have brand_voice configured yet
+      const isNewStore = !registeredStore.brand_voice || registeredStore.brand_voice === 'friendly';
+      const onboardingComplete = registeredStore.onboarding_complete === true;
+      
+      // Redirect to onboarding for new stores, dashboard for existing ones
+      let redirectUrl: string;
+      if (isNewStore && !onboardingComplete) {
+        // New store - start onboarding flow
+        redirectUrl = `${getAppUrl()}/onboarding/brand-voice?shop=${normalizedShop}&host=${host}`;
+        logger.info('Redirecting new store to onboarding', {
+          context: 'AuthCallback',
+          metadata: { shop: normalizedShop, isNewStore, onboardingComplete }
+        });
+      } else {
+        // Existing store - go to dashboard
+        redirectUrl = `${getAppUrl()}/?shop=${normalizedShop}&host=${host}`;
+        logger.info('Redirecting existing store to dashboard', {
+          context: 'AuthCallback',
+          metadata: { shop: normalizedShop, isNewStore, onboardingComplete }
+        });
+      }
+      
+      // Pass id_token or session if available for authentication
+      if (idToken) {
+        redirectUrl += `&id_token=${encodeURIComponent(idToken)}`;
+      } else if (session) {
+        redirectUrl += `&session=${encodeURIComponent(session)}`;
+      }
+      redirect(redirectUrl);
     } catch (error: any) {
       // Check if this is a Next.js redirect, and if so, re-throw it
       if (error?.digest?.startsWith('NEXT_REDIRECT')) {

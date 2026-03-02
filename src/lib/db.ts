@@ -215,20 +215,6 @@ export class DatabaseService {
     }
   }
 
-  // Get product data
-  static async getProductById(productId: string): Promise<any | null> {
-    const client = await pool.connect();
-    try {
-      const result = await client.query(
-        'SELECT * FROM products WHERE id = $1',
-        [productId]
-      );
-      return result.rows.length > 0 ? result.rows[0] : null;
-    } finally {
-      client.release();
-    }
-  }
-
   // Get store metrics
   static async getStoreMetrics(storeId: string): Promise<any> {
     const client = await pool.connect();
@@ -339,13 +325,7 @@ export class DatabaseService {
         [storeId]
       );
       
-      // 6. Delete products
-      await client.query(
-        'DELETE FROM products WHERE store_id = $1::uuid',
-        [storeId]
-      );
-      
-      // 7. Finally delete the store
+      // 6. Finally delete the store
       await client.query(
         'DELETE FROM stores WHERE id = $1::uuid',
         [storeId]

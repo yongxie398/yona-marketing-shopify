@@ -128,7 +128,8 @@ export async function shopifyMiddleware(request: NextRequest) {
                       !isPublicRoute &&
                       !request.nextUrl.pathname.includes('/api/store-info') &&
                       !request.nextUrl.pathname.includes('/api/decisions') &&
-                      !request.nextUrl.pathname.includes('/api/metrics');
+                      !request.nextUrl.pathname.includes('/api/metrics') &&
+                      !request.nextUrl.pathname.includes('/api/billing');
   
   if (requiresAuth) {
     const shopifyHeaders = await authenticateShopifyRequest(request);

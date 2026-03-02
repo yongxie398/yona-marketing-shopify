@@ -33,11 +33,13 @@ export async function GET(request: NextRequest) {
 
     logger.info(`Fetching settings for shop: ${shopDomain}`);
 
-    // Get store from backend API
-    const response = await fetchWithTimeout(`${BACKEND_URL}/api/v1/stores/domain/${shopDomain}`, {
+    // Get store from backend API with cache-busting
+    const response = await fetchWithTimeout(`${BACKEND_URL}/api/v1/stores/domain/${shopDomain}?_t=${Date.now()}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
       },
     });
 
@@ -50,6 +52,13 @@ export async function GET(request: NextRequest) {
     }
 
     const store = await response.json();
+    
+    logger.info(`Backend returned store data for ${shopDomain}`, {
+      brand_tone: store.brand_tone,
+      frequency_caps: store.frequency_caps,
+      paused: store.paused,
+      config_updated_at: store.config_updated_at
+    });
 
     // Return the store configuration
     const storeConfig = {

@@ -5,10 +5,14 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { useSessionToken } from './AppBridgeProvider';
 import AICoreService from '../lib/ai-core-service';
+import ActivityFeed from '../components/ActivityFeed';
+import ControlGroupStats from '../components/ControlGroupStats';
+import FirstSaleCelebration from '../components/FirstSaleCelebration';
 
 export default function HomePage() {
   const [isPaused, setIsPaused] = useState(false);
   const [shopDomain, setShopDomain] = useState<string | null>(null);
+  const [storeId, setStoreId] = useState<string | null>(null);
   const [timeScope, setTimeScope] = useState<'today' | '7days' | '30days'>('7days');
   const [metrics, setMetrics] = useState<any>({
     today: {
@@ -32,6 +36,7 @@ export default function HomePage() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showFirstSaleCelebration, setShowFirstSaleCelebration] = useState(true);
 
   // Set shop domain from URL params
   useEffect(() => {
@@ -57,10 +62,11 @@ export default function HomePage() {
         }
         
         const storeInfo = await response.json();
-        const storeId = storeInfo.storeId;
+        const fetchedStoreId = storeInfo.storeId;
+        setStoreId(fetchedStoreId);
         
         // Fetch metrics from the proxied API endpoint
-        const metricsResponse = await fetch(`/api/analytics/revenue/${storeId}`);
+        const metricsResponse = await fetch(`/api/analytics/revenue/${fetchedStoreId}`);
         
         if (metricsResponse.ok) {
           const metricsData = await metricsResponse.json();
@@ -217,6 +223,70 @@ export default function HomePage() {
       maxWidth: '1200px',
       margin: '0 auto'
     }}>
+      {/* Navigation */}
+      <div style={{ marginBottom: '20px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <button
+          onClick={() => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const domain = urlParams.get('shop') || '';
+            const host = urlParams.get('host') || '';
+            const idToken = urlParams.get('id_token');
+            const session = urlParams.get('session');
+            
+            let settingsUrl = `/settings?shop=${encodeURIComponent(domain)}&host=${encodeURIComponent(host)}`;
+            if (idToken) {
+              settingsUrl += `&id_token=${encodeURIComponent(idToken)}`;
+            } else if (session) {
+              settingsUrl += `&session=${encodeURIComponent(session)}`;
+            }
+            
+            window.location.href = settingsUrl;
+          }}
+          style={{
+            padding: '8px 16px',
+            borderRadius: '4px',
+            border: '1px solid #eaeaea',
+            backgroundColor: 'white',
+            color: '#333',
+            cursor: 'pointer',
+            fontSize: '14px',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          Settings
+        </button>
+        <button
+          onClick={() => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const domain = urlParams.get('shop') || '';
+            const host = urlParams.get('host') || '';
+            const idToken = urlParams.get('id_token');
+            const session = urlParams.get('session');
+            
+            let billingUrl = `/billing?shop=${encodeURIComponent(domain)}&host=${encodeURIComponent(host)}`;
+            if (idToken) {
+              billingUrl += `&id_token=${encodeURIComponent(idToken)}`;
+            } else if (session) {
+              billingUrl += `&session=${encodeURIComponent(session)}`;
+            }
+            
+            window.location.href = billingUrl;
+          }}
+          style={{
+            padding: '8px 16px',
+            borderRadius: '4px',
+            border: '1px solid #eaeaea',
+            backgroundColor: 'white',
+            color: '#333',
+            cursor: 'pointer',
+            fontSize: '14px',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          Billing
+        </button>
+      </div>
+
       {/* AI Status Header */}
       <div style={{ marginBottom: '30px', padding: '20px', borderRadius: '8px', backgroundColor: '#f8f9fa', border: '1px solid #eaeaea' }}>
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
@@ -344,6 +414,13 @@ export default function HomePage() {
           )}
         </div>
       </div>
+
+      {/* AI Activity Feed - NEW */}
+      {storeId && (
+        <div style={{ marginBottom: '30px' }}>
+          <ActivityFeed storeId={storeId} limit={10} />
+        </div>
+      )}
 
       {/* AI Insight */}
       <div style={{ marginBottom: '30px' }}>
@@ -530,6 +607,21 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+
+      {/* Control Group Stats - NEW */}
+      {storeId && (
+        <div style={{ marginBottom: '30px' }}>
+          <ControlGroupStats storeId={storeId} />
+        </div>
+      )}
+
+      {/* First Sale Celebration - NEW */}
+      {storeId && showFirstSaleCelebration && (
+        <FirstSaleCelebration 
+          storeId={storeId} 
+          onDismiss={() => setShowFirstSaleCelebration(false)}
+        />
+      )}
     </div>
   );
 }

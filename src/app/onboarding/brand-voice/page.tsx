@@ -2,123 +2,200 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import {
-  Page,
-  Card,
-  Layout,
-  Button,
-  Text,
-  Badge,
-  Banner,
-  Select,
-  Box,
-  Divider
-} from '@shopify/polaris';
+import { Check } from 'lucide-react';
+import { cva, type VariantProps } from 'class-variance-authority';
+import { cn } from '@/lib/utils';
 
-type BrandVoice = 'friendly' | 'professional' | 'playful' | 'minimal';
+type VoiceType = 'friendly' | 'professional' | 'playful' | 'minimal';
 
-interface VoiceOption {
-  value: BrandVoice;
-  label: string;
-  description: string;
-  icon: string;
-}
-
-const VOICE_OPTIONS: VoiceOption[] = [
+const voiceOptions = [
   {
-    value: 'friendly',
-    label: 'Friendly',
-    description: 'Warm, conversational, and approachable',
-    icon: '👋'
+    id: 'friendly' as const,
+    icon: '👋',
+    name: 'Friendly',
+    description: 'Warm & approachable',
+    useCase: 'Lifestyle brands, small businesses',
   },
   {
-    value: 'professional',
-    label: 'Professional',
-    description: 'Polished, authoritative, and trustworthy',
-    icon: '💼'
+    id: 'professional' as const,
+    icon: '💼',
+    name: 'Professional',
+    description: 'Polished & trustworthy',
+    useCase: 'B2B, premium brands',
   },
   {
-    value: 'playful',
-    label: 'Playful',
-    description: 'Fun, energetic, and memorable',
-    icon: '🎉'
+    id: 'playful' as const,
+    icon: '🎉',
+    name: 'Playful',
+    description: 'Fun & energetic',
+    useCase: 'Youth brands, entertainment',
   },
   {
-    value: 'minimal',
-    label: 'Minimal',
-    description: 'Clean, direct, and no-nonsense',
-    icon: '✨'
-  }
+    id: 'minimal' as const,
+    icon: '✨',
+    name: 'Minimal',
+    description: 'Clean & direct',
+    useCase: 'Tech brands, modern aesthetics',
+  },
 ];
 
-const SAMPLE_MESSAGES: Record<BrandVoice, { subject: string; body: string }> = {
+const emailPreviews: Record<VoiceType, {
+  subject: string;
+  greeting: string;
+  body: string;
+  items: string[];
+  cta: string;
+  closing: string;
+  signature: string;
+}> = {
   friendly: {
-    subject: 'You left something behind, Sarah! 👋',
-    body: `Hi Sarah,
-
-I noticed you were checking out some great items earlier but didn't complete your order. No worries — it happens!
-
-Your cart is still waiting for you:
-• Premium Yoga Mat ($45)
-• Resistance Bands Set ($25)
-
-Come back whenever you're ready. We're here to help if you have any questions!
-
-Cheers,
-The Team`
+    subject: 'We noticed you left something behind! 🛒',
+    greeting: 'Hi Sarah!',
+    body: 'We noticed you left some awesome items in your cart. No pressure, but we wanted to make sure you didn\'t forget!',
+    items: ['Classic White T-Shirt - $29.00', 'Running Shoes - $89.00'],
+    cta: 'Complete Your Order',
+    closing: 'Cheers,',
+    signature: 'The Team',
   },
   professional: {
-    subject: 'Complete Your Order - Items Reserved',
-    body: `Dear Valued Customer,
-
-We noticed you have items waiting in your shopping cart:
-
-Premium Yoga Mat - $45
-Resistance Bands Set - $25
-
-These items are reserved for you. Complete your purchase to secure your selection.
-
-[Complete Order]
-
-Best regards,
-Customer Service Team`
+    subject: 'Your Cart Awaits Your Return',
+    greeting: 'Dear Sarah,',
+    body: 'We noticed you have items awaiting purchase in your shopping cart. We wanted to remind you that these items are still available.',
+    items: ['Classic White T-Shirt - $29.00', 'Running Shoes - $89.00'],
+    cta: 'Complete Your Order',
+    closing: 'Best regards,',
+    signature: 'Customer Service Team',
   },
   playful: {
-    subject: 'Your cart is having FOMO 😱',
-    body: `Hey there!
-
-Your Premium Yoga Mat and Resistance Bands are feeling a little lonely... They really want to come home with you! 🏠
-
-Don't leave them hanging — they've been practicing their best poses just for you! 🧘‍♀️
-
-[Rescue Your Cart]
-
-Stay awesome!
-✨ The Fun Fitness Crew`
+    subject: 'Oops! Your cart is feeling lonely! 🎉',
+    greeting: 'Hey Sarah! 👋',
+    body: 'Your cart is sitting there like "um, hello? remember me?" 😅 Those items are TOTALLY waiting for you!',
+    items: ['Classic White T-Shirt - $29.00', 'Running Shoes - $89.00'],
+    cta: 'Come Back & Shop!',
+    closing: 'You rock! ✨',
+    signature: 'The Team',
   },
   minimal: {
-    subject: 'Your cart: 2 items',
-    body: `Your shopping cart has been saved.
-
-Items:
-- Premium Yoga Mat ($45)
-- Resistance Bands Set ($25)
-
-[Complete Purchase]
-
-Questions? Reply to this email.`
-  }
+    subject: 'Cart Reminder',
+    greeting: 'Sarah,',
+    body: 'Items in your cart:',
+    items: ['Classic White T-Shirt - $29.00', 'Running Shoes - $89.00'],
+    cta: 'Complete Order',
+    closing: '',
+    signature: 'Thanks',
+  },
 };
+
+// Card component from ui_prototype
+function Card({ className, ...props }: React.ComponentProps<'div'>) {
+  return (
+    <div
+      data-slot="card"
+      className={`bg-card text-card-foreground flex flex-col gap-6 rounded-xl border ${className || ''}`}
+      {...props}
+    />
+  );
+}
+
+// Button component - matches ui_prototype exactly
+const buttonVariants = cva(
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+  {
+    variants: {
+      variant: {
+        default: "bg-emerald-600 text-white hover:bg-emerald-700",
+        destructive: "bg-red-600 text-white hover:bg-red-700",
+        outline: "border border-gray-300 bg-white text-gray-900 hover:bg-gray-100",
+        secondary: "bg-gray-100 text-gray-900 hover:bg-gray-200",
+        ghost: "hover:bg-gray-100 text-gray-900",
+        link: "text-gray-900 underline-offset-4 hover:underline",
+      },
+      size: {
+        default: "h-9 px-4 py-2",
+        sm: "h-8 rounded-md gap-1.5 px-3",
+        lg: "h-10 rounded-md px-6 text-base",
+        icon: "h-9 w-9 rounded-md",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
+  }
+);
+
+interface ButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {}
+
+function Button({ className, variant, size, ...props }: ButtonProps) {
+  return (
+    <button
+      className={cn(buttonVariants({ variant, size, className }))}
+      {...props}
+    />
+  );
+}
+
+// Badge component from ui_prototype
+function Badge({
+  className,
+  variant = 'default',
+  ...props
+}: React.ComponentProps<'span'> & {
+  variant?: 'default' | 'secondary' | 'destructive' | 'outline';
+}) {
+  const variants = {
+    default: 'border-transparent bg-primary text-primary-foreground hover:bg-primary/80',
+    secondary: 'border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80',
+    destructive: 'border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80',
+    outline: 'text-foreground border-border',
+  };
+
+  return (
+    <span
+      data-slot="badge"
+      className={`inline-flex items-center justify-center rounded-md border px-2 py-0.5 text-xs font-medium w-fit whitespace-nowrap shrink-0 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${variants[variant]} ${className || ''}`}
+      {...props}
+    />
+  );
+}
+
+// Progress component from ui_prototype
+function Progress({
+  className,
+  value,
+  ...props
+}: React.ComponentProps<'div'> & {
+  value: number;
+}) {
+  return (
+    <div
+      data-slot="progress"
+      className={`bg-gray-200 relative h-2 w-full overflow-hidden rounded-full ${className || ''}`}
+      {...props}
+    >
+      <div
+        data-slot="progress-indicator"
+        className="bg-gray-900 h-full w-full flex-1 transition-all"
+        style={{ transform: `translateX(-${100 - (value || 0)}%)` }}
+      />
+    </div>
+  );
+}
 
 export default function BrandVoicePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [selectedVoice, setSelectedVoice] = useState<BrandVoice>('friendly');
-  const [loading, setLoading] = useState(false);
+  const [selectedVoice, setSelectedVoice] = useState<VoiceType>('friendly');
   const [saving, setSaving] = useState(false);
   const [shopDomain, setShopDomain] = useState<string | null>(null);
   const [storeId, setStoreId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const currentStep = 2;
+  const totalSteps = 3;
+  const progressPercentage = (currentStep / totalSteps) * 100;
 
   useEffect(() => {
     const shop = searchParams.get('shop');
@@ -128,7 +205,7 @@ export default function BrandVoicePage() {
   useEffect(() => {
     const fetchStoreId = async () => {
       if (!shopDomain) return;
-      
+
       try {
         const response = await fetch(`/api/store-info?shop=${encodeURIComponent(shopDomain)}`);
         if (response.ok) {
@@ -139,17 +216,13 @@ export default function BrandVoicePage() {
         console.error('Error fetching store ID:', err);
       }
     };
-    
+
     fetchStoreId();
   }, [shopDomain]);
 
-  const handleVoiceSelect = (voice: BrandVoice) => {
-    setSelectedVoice(voice);
-  };
-
   const handleContinue = async () => {
-    if (!storeId) {
-      setError('Store not found. Please try again.');
+    if (!shopDomain) {
+      setError('Shop domain not found. Please try again.');
       return;
     }
 
@@ -157,209 +230,226 @@ export default function BrandVoicePage() {
     setError(null);
 
     try {
-      // Save brand voice to backend
-      const response = await fetch(`/api/settings?shop=${encodeURIComponent(shopDomain || '')}`, {
+      const response = await fetch(`/api/settings?shop=${encodeURIComponent(shopDomain)}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           brand_voice: selectedVoice,
+          onboarding_complete: true,
         }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to save brand voice');
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Settings API error:', response.status, errorData);
+        throw new Error(errorData.error || `Failed to save brand voice (${response.status})`);
       }
 
-      // Navigate to AI Live confirmation page
       const host = searchParams.get('host');
-      let redirectUrl = `/onboarding/ai-live?shop=${encodeURIComponent(shopDomain || '')}`;
+      let redirectUrl = `/onboarding/ai-live?shop=${encodeURIComponent(shopDomain)}`;
       if (host) {
         redirectUrl += `&host=${encodeURIComponent(host)}`;
       }
-      
+
       router.push(redirectUrl);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving brand voice:', err);
-      setError('Failed to save your selection. Please try again.');
+      setError(err.message || 'Failed to save your selection. Please try again.');
     } finally {
       setSaving(false);
     }
   };
 
-  const sampleMessage = SAMPLE_MESSAGES[selectedVoice];
+  const handleBack = () => {
+    router.back();
+  };
+
+  const preview = emailPreviews[selectedVoice];
 
   return (
-    <Page
-      title="Choose Your AI's Personality"
-      subtitle="Select a brand voice that matches your store's style"
-    >
-      <Layout>
-        <Layout.Section>
-          {error && (
-            <Banner tone="critical" onDismiss={() => setError(null)}>
-              <p>{error}</p>
-            </Banner>
-          )}
-
-          <Card>
-            <div style={{ padding: '20px' }}>
-              <Text variant="headingMd" as="h2">
-                Step 4 of 5: Brand Voice
-              </Text>
-              <Box paddingBlockStart="200">
-                <Text tone="subdued" as="p">
-                  Your AI will communicate with customers using this personality. 
-                  Choose the one that best represents your brand.
-                </Text>
-              </Box>
-            </div>
-          </Card>
-
-          <Box paddingBlockStart="400">
-            <Card>
-              <div style={{ padding: '20px' }}>
-                <Text variant="headingMd" as="h2" style={{ marginBottom: '16px' }}>
-                  Select a Voice
-                </Text>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
-                  {VOICE_OPTIONS.map((voice) => (
-                    <div
-                      key={voice.value}
-                      onClick={() => handleVoiceSelect(voice.value)}
-                      style={{
-                        padding: '20px',
-                        border: `2px solid ${selectedVoice === voice.value ? '#008060' : '#e1e3e5'}`,
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        backgroundColor: selectedVoice === voice.value ? '#f6f6f7' : 'white',
-                        transition: 'all 0.2s ease'
-                      }}
-                    >
-                      <div style={{ fontSize: '32px', marginBottom: '8px' }}>
-                        {voice.icon}
-                      </div>
-                      <Text variant="headingSm" as="h3">
-                        {voice.label}
-                      </Text>
-                      <Text tone="subdued" as="p">
-                        {voice.description}
-                      </Text>
-                      {selectedVoice === voice.value && (
-                        <Box paddingBlockStart="200">
-                          <Badge tone="success">Selected</Badge>
-                        </Box>
-                      )}
-                    </div>
-                  ))}
-                </div>
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50">
+      {/* Progress Bar */}
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-4xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-lg flex items-center justify-center">
+                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
               </div>
-            </Card>
-          </Box>
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">Yona AI Revenue Agent</h3>
+                <p className="text-xs text-gray-500">Quick Setup</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="text-sm font-medium text-gray-900">
+                Step {currentStep} of {totalSteps}
+              </span>
+              <p className="text-xs text-gray-500">{Math.round(progressPercentage)}% Complete</p>
+            </div>
+          </div>
+          <Progress value={progressPercentage} className="h-2" />
+        </div>
+      </div>
 
-          <Box paddingBlockStart="400">
-            <Card>
-              <div style={{ padding: '20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                  <Text variant="headingMd" as="h2">
-                    Live Preview
-                  </Text>
-                  <Badge tone="info">Sample Email</Badge>
-                </div>
+      {/* Main Content */}
+      <div className="max-w-4xl mx-auto px-6 py-12">
+        {/* Header */}
+        <div className="text-center mb-12">
+          <h1 className="text-4xl font-bold text-gray-900 mb-3">Define Your Brand Voice</h1>
+          <p className="text-lg text-gray-600 max-w-2xl mx-auto">Choose how Yona communicates with your customers</p>
+        </div>
 
-                <div
-                  style={{
-                    backgroundColor: '#f6f6f7',
-                    border: '1px solid #e1e3e5',
-                    borderRadius: '8px',
-                    padding: '20px',
-                    fontFamily: 'monospace',
-                    fontSize: '14px',
-                    lineHeight: '1.6'
-                  }}
-                >
-                  <div style={{ marginBottom: '16px', paddingBottom: '16px', borderBottom: '1px solid #e1e3e5' }}>
-                    <Text tone="subdued" as="p" variant="bodySm">
-                      Subject:
-                    </Text>
-                    <Text as="p" variant="bodyMd" fontWeight="semibold">
-                      {sampleMessage.subject}
-                    </Text>
+        {/* Error Banner */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
+            <div className="flex items-center justify-between">
+              <p className="text-red-800">{error}</p>
+              <button onClick={() => setError(null)} className="text-red-600 hover:text-red-800">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-8">
+          {/* Voice Options */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {voiceOptions.map((voice) => (
+              <Card
+                key={voice.id}
+                className={`p-6 cursor-pointer transition-all hover:shadow-lg text-center ${
+                  selectedVoice === voice.id
+                    ? 'border-2 border-emerald-500 shadow-lg bg-emerald-50'
+                    : 'border-2 border-gray-200 hover:border-emerald-300'
+                }`}
+                onClick={() => setSelectedVoice(voice.id)}
+              >
+                <div className="text-4xl mb-3">{voice.icon}</div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">{voice.name}</h3>
+                <p className="text-sm text-gray-600 mb-3">{voice.description}</p>
+                <p className="text-sm text-gray-500 mb-4">{voice.useCase}</p>
+
+                {selectedVoice === voice.id && (
+                  <div className="flex items-center justify-center gap-2 text-emerald-700">
+                    <Check className="w-4 h-4" />
+                    <span className="text-xs font-semibold">SELECTED</span>
                   </div>
+                )}
+              </Card>
+            ))}
+          </div>
 
-                  <div style={{ whiteSpace: 'pre-wrap' }}>
-                    {sampleMessage.body}
-                  </div>
-                </div>
+          {/* Live Email Preview */}
+          <Card className="p-6 bg-gradient-to-br from-gray-50 to-white border-2 border-gray-300">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center">
+                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Live Email Preview</h3>
+              <Badge variant="outline" className="ml-auto">
+                {voiceOptions.find((v) => v.id === selectedVoice)?.name} Voice
+              </Badge>
+            </div>
 
-                <Box paddingBlockStart="400">
-                  <Banner tone="info">
-                    <p>
-                      This is how your AI will sound when sending cart recovery emails. 
-                      The actual content will be personalized for each customer.
+            {/* Email Preview Content */}
+            <div className="bg-white border-2 border-gray-200 rounded-lg p-6 shadow-sm">
+              {/* Email Header */}
+              <div className="border-b border-gray-200 pb-4 mb-6">
+                <p className="text-xs text-gray-500 mb-1">Subject:</p>
+                <p className="font-semibold text-gray-900">{preview.subject}</p>
+              </div>
+
+              {/* Email Body */}
+              <div className="space-y-4">
+                <p className="text-gray-900">{preview.greeting}</p>
+
+                <p className="text-gray-700">{preview.body}</p>
+
+                {preview.body !== 'Items in your cart:' && (
+                  <div className="pt-2">
+                    <p className="text-gray-900 font-medium mb-2">
+                      {selectedVoice === 'playful'
+                        ? 'What you left behind:'
+                        : 'Your items are waiting for you:'}
                     </p>
-                  </Banner>
-                </Box>
-              </div>
-            </Card>
-          </Box>
+                    <ul className="space-y-1">
+                      {preview.items.map((item, index) => (
+                        <li key={index} className="text-gray-700 flex items-start gap-2">
+                          <span className="text-gray-400">•</span>
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
-          <Box paddingBlockStart="400" paddingBlockEnd="400">
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <Button
-                onClick={() => router.back()}
-                variant="secondary"
-              >
-                Back
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleContinue}
-                loading={saving}
-                disabled={!storeId}
-              >
-                Sounds Good! Continue →
-              </Button>
-            </div>
-          </Box>
-        </Layout.Section>
+                {preview.body === 'Items in your cart:' && (
+                  <ul className="space-y-1">
+                    {preview.items.map((item, index) => (
+                      <li key={index} className="text-gray-700 flex items-start gap-2">
+                        <span className="text-gray-400">•</span>
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
 
-        <Layout.Section variant="oneThird">
-          <Card>
-            <div style={{ padding: '16px' }}>
-              <Text variant="headingSm" as="h3">
-                Onboarding Progress
-              </Text>
-              <Box paddingBlockStart="200">
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Badge tone="success">✓</Badge>
-                    <Text as="span">Install App</Text>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Badge tone="success">✓</Badge>
-                    <Text as="span">Connect Store</Text>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Badge tone="success">✓</Badge>
-                    <Text as="span">Sync Data</Text>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Badge tone="info">→</Badge>
-                    <Text as="span" fontWeight="semibold">Brand Voice</Text>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Badge>○</Badge>
-                    <Text tone="subdued" as="span">AI Activation</Text>
-                  </div>
+                {/* CTA Button */}
+                <div className="pt-4">
+                  <button className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-6 py-3 rounded-lg transition-colors">
+                    {preview.cta}
+                  </button>
                 </div>
-              </Box>
+
+                {/* Signature */}
+                <div className="pt-4 border-t border-gray-100">
+                  {preview.closing && <p className="text-gray-700">{preview.closing}</p>}
+                  <p className="text-gray-900 font-medium">{preview.signature}</p>
+                </div>
+              </div>
             </div>
+
+            {/* Preview Note */}
+            <p className="text-xs text-gray-500 mt-4 text-center">
+              This is a preview of how your cart abandonment emails will look. All content is AI-personalized for each customer.
+            </p>
           </Card>
-        </Layout.Section>
-      </Layout>
-    </Page>
+
+          {/* Navigation */}
+          <div className="flex items-center justify-between pt-6 border-t border-gray-200">
+            <Button variant="outline" onClick={handleBack}>
+              Back
+            </Button>
+            <Button
+              onClick={handleContinue}
+              className="bg-emerald-600 hover:bg-emerald-700 px-8"
+              size="lg"
+              disabled={!storeId || saving}
+            >
+              {saving ? (
+                <span className="flex items-center">
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Saving...
+                </span>
+              ) : (
+                'Continue'
+              )}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

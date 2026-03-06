@@ -12,9 +12,9 @@ import {
 export default function HomePage() {
   return (
     <Page title="AI Revenue Agent">
-      <Card sectioned>
+      <Card>
         <TextContainer>
-          <Text variant="bodyLg">
+          <Text variant="bodyLg" as="p">
             Welcome to your AI Revenue Agent!
           </Text>
         </TextContainer>

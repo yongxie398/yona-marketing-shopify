@@ -1,264 +1,182 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Card, Text, Badge, Spinner, Button, Banner } from '@shopify/polaris';
+import { Card } from "./ui/card";
+import { Badge } from "./ui/badge";
+import { TrendingUp, Brain, Clock, Target } from "lucide-react";
+import { ScrollArea } from "./ui/scroll-area";
+
+interface ActivityFeedProps {
+  aiStatus: "active" | "paused";
+}
 
 interface Activity {
   id: string;
-  timestamp: string;
-  type: 'send' | 'skip' | 'skip_control_group' | 'decision';
-  campaign_type: string;
-  description: string;
-  customer: {
-    email: string;
-    first_name: string;
-  };
-  message_id?: string;
-  message_status?: string;
-  attributed_revenue?: number;
-  icon: string;
-  color: string;
+  type: "decision" | "conversion" | "learning";
+  action: string;
+  reasoning: string;
+  time: string;
+  revenue?: number;
+  customer?: string;
+  campaign?: string;
 }
 
-interface ActivityFeedProps {
-  storeId: string;
-  limit?: number;
-  showTitle?: boolean;
+const mockActivities: Activity[] = [
+  {
+    id: "1",
+    type: "conversion",
+    action: "Revenue recovered",
+    reasoning: "Sarah M. completed purchase after cart abandonment email",
+    time: "8 minutes ago",
+    revenue: 127.50,
+    customer: "Sarah M.",
+    campaign: "Cart Abandonment"
+  },
+  {
+    id: "2",
+    type: "decision",
+    action: "Sent cart abandonment email",
+    reasoning: "Michael added $215 to cart, viewed 3x in 2 days, no frequency cap hit",
+    time: "15 minutes ago",
+    customer: "Michael C.",
+    campaign: "Cart Abandonment"
+  },
+  {
+    id: "3",
+    type: "learning",
+    action: "AI optimized send timing",
+    reasoning: "Friday 6-9PM shows 3.2x higher conversion → adjusted timing window",
+    time: "32 minutes ago",
+  },
+  {
+    id: "4",
+    type: "decision",
+    action: "Sent browse abandonment email",
+    reasoning: "Emma viewed product 4x, high-intent behavior detected, 4hr delay optimal",
+    time: "1 hour ago",
+    customer: "Emma W.",
+    campaign: "Browse Abandonment"
+  },
+  {
+    id: "5",
+    type: "conversion",
+    action: "Revenue recovered",
+    reasoning: "James T. completed checkout after abandonment intervention",
+    time: "2 hours ago",
+    revenue: 89.99,
+    customer: "James T.",
+    campaign: "Checkout Abandonment"
+  },
+  {
+    id: "6",
+    type: "decision",
+    action: "Paused messaging to customer",
+    reasoning: "Lisa hit frequency cap (3 messages in 7 days) → waiting 48h",
+    time: "3 hours ago",
+    customer: "Lisa P.",
+  },
+  {
+    id: "7",
+    type: "learning",
+    action: "AI improved subject lines",
+    reasoning: "Personalized subjects show +67% open rate → now default",
+    time: "4 hours ago",
+  },
+  {
+    id: "8",
+    type: "decision",
+    action: "Sent post-purchase follow-up",
+    reasoning: "David completed order → building trust with immediate thank you",
+    time: "5 hours ago",
+    customer: "David K.",
+    campaign: "Post-Purchase"
+  },
+];
+
+function getActivityIcon(type: Activity["type"]) {
+  switch (type) {
+    case "decision":
+      return <Target className="w-4 h-4" />;
+    case "conversion":
+      return <TrendingUp className="w-4 h-4" />;
+    case "learning":
+      return <Brain className="w-4 h-4" />;
+  }
 }
 
-export default function ActivityFeed({ storeId, limit = 10, showTitle = true }: ActivityFeedProps) {
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastId, setLastId] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(false);
-
-  const fetchActivities = async (isPolling = false) => {
-    if (!storeId) return;
-
-    try {
-      if (!isPolling) {
-        setLoading(true);
-      }
-
-      const url = new URL(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/billing/stores/${storeId}/activity-feed`);
-      url.searchParams.append('limit', limit.toString());
-      url.searchParams.append('days', '7');
-
-      const response = await fetch(url.toString());
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch activity feed: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setActivities(data.activities || []);
-      setHasMore(data.activities?.length === limit);
-      
-      if (data.activities?.length > 0) {
-        setLastId(data.activities[0].id);
-      }
-    } catch (err) {
-      console.error('Error fetching activity feed:', err);
-      if (!isPolling) {
-        setError('Failed to load activity feed');
-      }
-    } finally {
-      if (!isPolling) {
-        setLoading(false);
-      }
-    }
-  };
-
-  // Initial load
-  useEffect(() => {
-    fetchActivities();
-  }, [storeId, limit]);
-
-  // Polling for real-time updates
-  useEffect(() => {
-    if (!storeId) return;
-
-    const pollInterval = setInterval(async () => {
-      try {
-        const url = new URL(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/billing/stores/${storeId}/activity-stream`);
-        if (lastId) {
-          url.searchParams.append('last_id', lastId);
-        }
-
-        const response = await fetch(url.toString());
-        if (response.ok) {
-          const data = await response.json();
-          if (data.new_activities?.length > 0) {
-            setActivities(prev => [...data.new_activities, ...prev].slice(0, limit));
-            setLastId(data.new_activities[0].id);
-          }
-        }
-      } catch (err) {
-        // Silent fail on polling
-        console.debug('Polling error:', err);
-      }
-    }, 10000); // Poll every 10 seconds
-
-    return () => clearInterval(pollInterval);
-  }, [storeId, lastId, limit]);
-
-  const getBadgeStatus = (type: string) => {
-    switch (type) {
-      case 'send':
-        return 'success';
-      case 'skip':
-        return 'warning';
-      case 'skip_control_group':
-        return 'info';
-      default:
-        return 'default';
-    }
-  };
-
-  const getBadgeLabel = (type: string) => {
-    switch (type) {
-      case 'send':
-        return 'Sent';
-      case 'skip':
-        return 'Skipped';
-      case 'skip_control_group':
-        return 'Control Group';
-      default:
-        return type;
-    }
-  };
-
-  const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-    
-    if (minutes < 1) return 'Just now';
-    if (minutes < 60) return `${minutes}m ago`;
-    if (hours < 24) return `${hours}h ago`;
-    if (days < 7) return `${days}d ago`;
-    return date.toLocaleDateString();
-  };
-
-  if (loading) {
-    return (
-      <Card>
-        <div style={{ padding: '20px', textAlign: 'center' }}>
-          <Spinner size="small" />
-          <Text as="p" variant="bodySm" tone="subdued">
-            Loading AI activity...
-          </Text>
-        </div>
-      </Card>
-    );
+function getActivityColor(type: Activity["type"]) {
+  switch (type) {
+    case "decision":
+      return "bg-blue-100 text-blue-700";
+    case "conversion":
+      return "bg-green-100 text-green-700";
+    case "learning":
+      return "bg-purple-100 text-purple-700";
   }
+}
 
-  if (error) {
-    return (
-      <Card>
-        <Banner tone="critical">
-          <p>{error}</p>
-          <Button onClick={() => fetchActivities()} size="slim">
-            Retry
-          </Button>
-        </Banner>
-      </Card>
-    );
-  }
-
-  if (activities.length === 0) {
-    return (
-      <Card>
-        {showTitle && (
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid #e1e3e5' }}>
-            <Text variant="headingMd" as="h2">
-              🤖 AI Activity Feed
-            </Text>
-          </div>
-        )}
-        <div style={{ padding: '40px 20px', textAlign: 'center' }}>
-          <Text as="p" variant="bodyMd" tone="subdued">
-            No AI activity yet. The AI will start monitoring your store soon.
-          </Text>
-        </div>
-      </Card>
-    );
-  }
-
+export function ActivityFeed({ aiStatus }: ActivityFeedProps) {
   return (
-    <Card>
-      {showTitle && (
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #e1e3e5' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text variant="headingMd" as="h2">
-              🤖 AI Activity Feed
-            </Text>
-            <Badge tone="success">Live</Badge>
-          </div>
-          <Text as="p" variant="bodySm" tone="subdued">
-            Real-time view of AI decisions
-          </Text>
+    <Card className="p-6">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">AI Decision Log</h3>
+          <p className="text-sm text-gray-500 mt-1">Every action explained in plain language</p>
         </div>
-      )}
-      
-      <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-        {activities.map((activity, index) => (
-          <div
-            key={activity.id}
-            style={{
-              padding: '16px 20px',
-              borderBottom: index < activities.length - 1 ? '1px solid #e1e3e5' : 'none',
-              display: 'flex',
-              gap: '12px',
-              alignItems: 'flex-start'
-            }}
-          >
-            <div style={{ fontSize: '20px', flexShrink: 0 }}>
-              {activity.icon}
-            </div>
-            
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <Badge tone={getBadgeStatus(activity.type)}>
-                    {getBadgeLabel(activity.type)}
-                  </Badge>
-                  <Text as="span" variant="bodySm" tone="subdued">
-                    {activity.campaign_type?.replace('_', ' ')}
-                  </Text>
-                </div>
-                <Text as="span" variant="bodySm" tone="subdued">
-                  {formatTime(activity.timestamp)}
-                </Text>
-              </div>
-              
-              <Text as="p" variant="bodyMd">
-                {activity.description}
-              </Text>
-              
-              {activity.attributed_revenue && activity.attributed_revenue > 0 && (
-                <div style={{ marginTop: '8px' }}>
-                  <Badge tone="success">
-                    💰 ${activity.attributed_revenue.toFixed(2)} recovered
-                  </Badge>
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
+        <Badge variant="outline" className="gap-1">
+          <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+          Live
+        </Badge>
       </div>
-      
-      {hasMore && (
-        <div style={{ padding: '12px 20px', borderTop: '1px solid #e1e3e5', textAlign: 'center' }}>
-          <Button variant="plain" onClick={() => fetchActivities()}>
-            Load more
-          </Button>
+
+      {aiStatus === "paused" ? (
+        <div className="text-center py-12">
+          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Clock className="w-8 h-8 text-gray-400" />
+          </div>
+          <h4 className="text-lg font-medium text-gray-900 mb-2">AI Agent Paused</h4>
+          <p className="text-sm text-gray-500">Resume to see autonomous revenue recovery in action</p>
         </div>
+      ) : (
+        <ScrollArea className="h-[500px] pr-4">
+          <div className="space-y-4">
+            {mockActivities.map((activity) => (
+              <div key={activity.id} className="pb-4 border-b border-gray-100 last:border-0">
+                <div className="flex gap-3">
+                  <div className={`p-2 rounded-lg h-fit ${getActivityColor(activity.type)}`}>
+                    {getActivityIcon(activity.type)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <div>
+                        <h4 className="font-semibold text-gray-900 text-sm">{activity.action}</h4>
+                        {activity.campaign && (
+                          <Badge variant="outline" className="mt-1 text-xs">
+                            {activity.campaign}
+                          </Badge>
+                        )}
+                      </div>
+                      <span className="text-xs text-gray-500 whitespace-nowrap">{activity.time}</span>
+                    </div>
+                    <p className="text-sm text-gray-600 leading-relaxed mt-1">
+                      <span className="font-medium">Why:</span> {activity.reasoning}
+                    </p>
+                    {activity.revenue && (
+                      <div className="mt-2 inline-flex items-center gap-1 px-2 py-1 bg-green-50 border border-green-200 rounded text-xs font-semibold text-green-700">
+                        <TrendingUp className="w-3 h-3" />
+                        +${activity.revenue.toFixed(2)} recovered
+                      </div>
+                    )}
+                    {activity.customer && !activity.revenue && (
+                      <div className="mt-2 text-xs text-gray-500">
+                        Customer: {activity.customer}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
       )}
     </Card>
   );

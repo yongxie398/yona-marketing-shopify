@@ -23,56 +23,52 @@ export default function MinimalHomePage() {
       title="AI Revenue Agent"
       subtitle="Autonomous revenue optimization for your Shopify store"
       primaryAction={
-        <Button primary>
+        <Button variant="primary">
           Configure Settings
         </Button>
       }
       secondaryActions={[
         <Button
-          variant={isPaused ? 'success' : 'warning'}
+          variant={isPaused ? 'primary' : 'secondary'}
           key="pause"
+          onClick={() => setIsPaused(!isPaused)}
         >
           {isPaused ? 'Resume AI' : 'Pause AI'}
         </Button>
       ]}
     >
       <Layout>
-        <Layout.Block>
-          <Card sectioned>
-            <Card.Section>
-              <TextContainer>
-                <Text variant="bodyLg">
-                  Welcome to your AI Revenue Agent!
-                </Text>
-              </TextContainer>
-            </Card.Section>
-            <Card.Section>
-              <Banner
-                title="Shopify Store Connected"
-                tone="success"
-              >
-                Your Shopify store is successfully connected.
-              </Banner>
-            </Card.Section>
+        <Layout.Section>
+          <Card>
+            <TextContainer>
+              <Text variant="bodyLg" as="p">
+                Welcome to your AI Revenue Agent!
+              </Text>
+            </TextContainer>
+            <Banner
+              title="Shopify Store Connected"
+              tone="success"
+            >
+              <p>Your Shopify store is successfully connected.</p>
+            </Banner>
           </Card>
-        </Layout.Block>
+        </Layout.Section>
 
-        <Layout.Block>
-          <Card title="Performance Metrics" sectioned>
-            <Card.Section>
-              <BlockStack horizontal spacing="400" wrap>
-                <Card title="Revenue Recovered" sectioned style={{ flex: 1, minWidth: '200px' }}>
-                  <Text variant="heading2xl" as="h2" style={{ color: '#008060', fontWeight: 'bold' }}>
-                    $0.00
-                  </Text>
-                  <Badge status="success" style={{ marginTop: '0.5rem' }}>
-                    +0.0% from last month
-                  </Badge>
-                </Card>
-              </BlockStack>
-            </Card.Section>
+        <Layout.Section>
+          <Card>
+            <Text variant="headingMd" as="h2">Performance Metrics</Text>
+            <BlockStack gap="400">
+              <Card>
+                <Text variant="heading2xl" as="h3" tone="success">
+                  $0.00
+                </Text>
+                <Badge tone="success">
+                  +0.0% from last month
+                </Badge>
+              </Card>
+            </BlockStack>
           </Card>
-        </Layout.Block>
+        </Layout.Section>
       </Layout>
     </Page>
   );

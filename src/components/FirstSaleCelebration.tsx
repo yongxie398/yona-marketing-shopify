@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Modal, Text, Badge, Button, Banner, Box } from '@shopify/polaris';
+import { Trophy, DollarSign, User, Clock, Share2, X, Target } from 'lucide-react';
 
 interface FirstSaleData {
   order_id: string;
@@ -14,264 +14,193 @@ interface FirstSaleData {
 }
 
 interface FirstSaleCelebrationProps {
-  storeId: string;
-  onDismiss: () => void;
+  open: boolean;
+  onClose: () => void;
+  saleAmount?: number;
+  customerName?: string;
+  recoveryTime?: string;
+  campaign?: string;
 }
 
-export default function FirstSaleCelebration({ storeId, onDismiss }: FirstSaleCelebrationProps) {
-  const [active, setActive] = useState(false);
-  const [saleData, setSaleData] = useState<FirstSaleData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [confetti, setConfetti] = useState(false);
+export default function FirstSaleCelebration({ 
+  open, 
+  onClose, 
+  saleAmount = 127.50,
+  customerName = "Sarah Johnson",
+  recoveryTime = "2 hours 34 minutes",
+  campaign = "Cart Abandonment"
+}: FirstSaleCelebrationProps) {
+  const [showConfetti, setShowConfetti] = useState(false);
 
   useEffect(() => {
-    checkForFirstSale();
-  }, [storeId]);
-
-  const checkForFirstSale = async () => {
-    if (!storeId) return;
-
-    try {
-      setLoading(true);
-      
-      // Check if user has already seen the celebration
-      const hasSeenCelebration = localStorage.getItem(`first-sale-celebrated-${storeId}`);
-      if (hasSeenCelebration) {
-        setLoading(false);
-        return;
-      }
-
-      // Fetch recent attributed orders
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/billing/stores/${storeId}/activity-feed?limit=20&days=30`
-      );
-
-      if (!response.ok) {
-        setLoading(false);
-        return;
-      }
-
-      const data = await response.json();
-      
-      // Look for the first attributed sale
-      const firstSale = data.activities?.find(
-        (activity: any) => activity.attributed_revenue && activity.attributed_revenue > 0
-      );
-
-      if (firstSale) {
-        setSaleData({
-          order_id: firstSale.message_id || 'Unknown',
-          customer_email: firstSale.customer?.email || 'customer@example.com',
-          customer_name: firstSale.customer?.first_name,
-          revenue: firstSale.attributed_revenue,
-          recovery_time_hours: 4, // Would come from backend
-          message_preview: firstSale.description,
-          campaign_type: firstSale.campaign_type
-        });
-        
-        setActive(true);
-        setConfetti(true);
-        
-        // Mark as celebrated
-        localStorage.setItem(`first-sale-celebrated-${storeId}`, 'true');
-        
-        // Stop confetti after 5 seconds
-        setTimeout(() => setConfetti(false), 5000);
-      }
-    } catch (err) {
-      console.error('Error checking for first sale:', err);
-    } finally {
-      setLoading(false);
+    if (open) {
+      setShowConfetti(true);
+      const timer = setTimeout(() => setShowConfetti(false), 3000);
+      return () => clearTimeout(timer);
     }
-  };
-
-  const handleDismiss = () => {
-    setActive(false);
-    onDismiss();
-  };
+  }, [open]);
 
   const handleShare = () => {
-    const text = `🎉 My AI just recovered its first sale! $${saleData?.revenue.toFixed(2)} in recovered revenue. #AIRevenueAgent`;
+    const shareText = `Just recovered my first sale with Yona AI! 💰 $${saleAmount.toFixed(2)} in revenue automatically recovered. 🎉`;
     
     if (navigator.share) {
       navigator.share({
-        title: 'First AI-Recovered Sale!',
-        text: text,
+        title: "Yona AI First Win!",
+        text: shareText,
+      }).catch(() => {
+        navigator.clipboard.writeText(shareText);
+        alert("Copied to clipboard!");
       });
     } else {
-      // Fallback to clipboard
-      navigator.clipboard.writeText(text);
-      alert('Copied to clipboard!');
+      navigator.clipboard.writeText(shareText);
+      alert("Copied to clipboard!");
     }
   };
 
-  if (loading || !saleData) {
-    return null;
-  }
+  if (!open) return null;
 
   return (
-    <Modal
-      open={active}
-      onClose={handleDismiss}
-      title=""
-      primaryAction={{
-        content: 'View Details',
-        onAction: handleDismiss,
-      }}
-      secondaryActions={[
-        {
-          content: 'Share Win 🎉',
-          onAction: handleShare,
-        },
-      ]}
-    >
-      <Modal.Section>
-        {/* Confetti Effect */}
-        {confetti && (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            pointerEvents: 'none',
-            zIndex: 9999,
-            overflow: 'hidden'
-          }}>
-            {Array.from({ length: 50 }).map((_, i) => (
-              <div
-                key={i}
-                style={{
-                  position: 'absolute',
-                  width: '10px',
-                  height: '10px',
-                  backgroundColor: ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7'][i % 5],
-                  left: `${Math.random() * 100}%`,
-                  top: '-10px',
-                  borderRadius: '50%',
-                  animation: `fall ${2 + Math.random() * 3}s linear forwards`,
-                  animationDelay: `${Math.random() * 2}s`
-                }}
-              />
-            ))}
-          </div>
-        )}
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+        
+        <div className="relative z-10 w-full max-w-[480px] overflow-hidden rounded-2xl border-0 bg-white shadow-2xl">
+          {showConfetti && (
+            <div className="pointer-events-none absolute inset-0 overflow-hidden">
+              {Array.from({ length: 50 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="absolute animate-confetti"
+                  style={{
+                    left: `${Math.random() * 100}%`,
+                    top: `-${Math.random() * 20}%`,
+                    animationDelay: `${Math.random() * 2}s`,
+                    animationDuration: `${2 + Math.random() * 2}s`,
+                  }}
+                >
+                  <div
+                    className="h-3 w-3 rounded-full"
+                    style={{
+                      backgroundColor: [
+                        "#10b981",
+                        "#3b82f6",
+                        "#f59e0b",
+                        "#ec4899",
+                        "#8b5cf6",
+                      ][Math.floor(Math.random() * 5)],
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
 
-        <div style={{ textAlign: 'center', padding: '20px' }}>
-          {/* Celebration Icon */}
-          <div style={{ fontSize: '64px', marginBottom: '16px' }}>
-            🎉
-          </div>
+          <button
+            onClick={onClose}
+            className="absolute right-4 top-4 z-10 rounded-full p-2 transition-colors hover:bg-gray-100"
+          >
+            <X className="h-5 w-5 text-gray-500" />
+          </button>
 
-          <Text variant="heading2xl" as="h2" fontWeight="bold">
-            FIRST RECOVERED SALE!
-          </Text>
+          <div className="relative bg-gradient-to-br from-emerald-50 via-white to-blue-50 p-8">
+            <div className="mb-6 text-center">
+              <div className="mb-4 inline-flex h-20 w-20 animate-bounce items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 shadow-lg">
+                <Trophy className="h-10 w-10 text-white" />
+              </div>
+              <h2 className="mb-2 text-3xl font-bold text-gray-900">
+                🎉 CONGRATULATIONS! 🎉
+              </h2>
+              <p className="text-lg font-semibold text-gray-700">
+                🏆 First Win Achievement Unlocked!
+              </p>
+              <p className="mt-2 text-gray-600">
+                You just recovered your first sale!
+              </p>
+            </div>
 
-          <Box paddingBlockStart="400">
-            <Text as="p" variant="bodyMd">
-              Your AI Revenue Agent just recovered its first abandoned cart!
-            </Text>
-          </Box>
-
-          {/* Sale Details */}
-          <Box paddingBlockStart="400">
-            <div 
-              style={{ 
-                backgroundColor: '#f0fdf4',
-                border: '1px solid #86efac',
-                borderRadius: '12px',
-                padding: '24px',
-                marginBottom: '20px'
-              }}
-            >
-              <Text variant="headingXl" as="p" fontWeight="bold" tone="success">
-                ${saleData.revenue.toFixed(2)}
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                Recovered Revenue
-              </Text>
-
-              <Box paddingBlockStart="300">
-                <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', flexWrap: 'wrap' }}>
-                  <div style={{ textAlign: 'center' }}>
-                    <Text variant="headingMd" as="p">
-                      {saleData.customer_name || saleData.customer_email.split('@')[0]}
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Customer
-                    </Text>
+            <div className="mb-6 rounded-xl border-2 border-emerald-200 bg-white p-6 shadow-xl">
+              <div className="space-y-4">
+                <div className="border-b border-gray-200 pb-4 text-center">
+                  <div className="mb-2 flex items-center justify-center gap-2">
+                    <DollarSign className="h-8 w-8 text-emerald-600" />
+                    <span className="text-5xl font-bold text-emerald-900">
+                      ${saleAmount.toFixed(2)}
+                    </span>
                   </div>
-                  <div style={{ textAlign: 'center' }}>
-                    <Text variant="headingMd" as="p">
-                      {saleData.recovery_time_hours}h
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Recovery Time
-                    </Text>
+                  <p className="text-sm font-semibold text-emerald-700">Recovered Revenue</p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3">
+                  <div className="flex items-center gap-3 rounded-lg bg-gray-50 p-3">
+                    <User className="h-5 w-5 text-blue-600" />
+                    <div>
+                      <p className="text-xs text-gray-600">Customer</p>
+                      <p className="font-semibold text-gray-900">{customerName}</p>
+                    </div>
                   </div>
-                  <div style={{ textAlign: 'center' }}>
-                    <Text variant="headingMd" as="p">
-                      {saleData.campaign_type?.replace('_', ' ')}
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Campaign
-                    </Text>
+
+                  <div className="flex items-center gap-3 rounded-lg bg-gray-50 p-3">
+                    <Clock className="h-5 w-5 text-purple-600" />
+                    <div>
+                      <p className="text-xs text-gray-600">Recovery Time</p>
+                      <p className="font-semibold text-gray-900">{recoveryTime}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 rounded-lg bg-gray-50 p-3">
+                    <div className="flex h-5 w-5 items-center justify-center">
+                      <Target className="h-5 w-5 text-emerald-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-600">Campaign</p>
+                      <p className="font-semibold text-gray-900">{campaign}</p>
+                    </div>
                   </div>
                 </div>
-              </Box>
+              </div>
             </div>
-          </Box>
 
-          {/* What Happened */}
-          <Box paddingBlockStart="200">
-            <Banner tone="success">
-              <p>
-                <strong>What happened:</strong> Your AI sent a personalized message to{' '}
-                {saleData.customer_name || 'this customer'} after they abandoned their cart. 
-                They returned and completed their purchase!
+            <div className="mb-6 rounded-lg border border-purple-200 bg-gradient-to-r from-purple-50 to-pink-50 p-4 text-center">
+              <p className="text-sm text-gray-700">
+                This is just the beginning! Your AI Revenue Agent is working 24/7 
+                to recover more sales automatically.
               </p>
-            </Banner>
-          </Box>
-
-          {/* Achievement Badge */}
-          <Box paddingBlockStart="400">
-            <div 
-              style={{ 
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                backgroundColor: '#fef3c7',
-                border: '1px solid #fbbf24',
-                borderRadius: '20px',
-                padding: '8px 16px'
-              }}
-            >
-              <span style={{ fontSize: '20px' }}>🏆</span>
-              <Text as="span" variant="bodySm" fontWeight="semibold">
-                First Win Achievement Unlocked!
-              </Text>
             </div>
-          </Box>
 
-          {/* Next Steps */}
-          <Box paddingBlockStart="400">
-            <Text as="p" variant="bodySm" tone="subdued">
-              This is just the beginning! Your AI will continue monitoring and recovering 
-              sales 24/7. Check your dashboard for real-time updates.
-            </Text>
-          </Box>
+            <div className="flex gap-3">
+              <button
+                onClick={handleShare}
+                className="flex-1 gap-2 rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-900 transition-colors hover:bg-gray-100 hover:text-gray-900"
+              >
+                <Share2 className="h-4 w-4" />
+                Share Your Win
+              </button>
+              <button
+                onClick={onClose}
+                className="flex-1 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700"
+              >
+                View Dashboard
+              </button>
+            </div>
+          </div>
         </div>
-      </Modal.Section>
+      </div>
 
-      {/* Add CSS for confetti animation */}
-      <style jsx>{`
-        @keyframes fall {
-          to {
-            transform: translateY(100vh) rotate(360deg);
+      <style jsx global>{`
+        @keyframes confetti {
+          0% {
+            transform: translateY(0) rotateZ(0deg);
+            opacity: 1;
+          }
+          100% {
+            transform: translateY(100vh) rotateZ(720deg);
             opacity: 0;
           }
         }
+        .animate-confetti {
+          animation: confetti linear forwards;
+        }
       `}</style>
-    </Modal>
+    </>
   );
 }

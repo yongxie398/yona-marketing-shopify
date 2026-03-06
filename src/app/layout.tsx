@@ -1,7 +1,6 @@
 import './globals.css';
 import type { Metadata } from 'next';
 import ClientWrapper from './ClientWrapper';
-import '@shopify/polaris/build/esm/styles.css';
 
 // Use default font to avoid network requests
 const inter = { className: '' }; // Using system font stack from CSS

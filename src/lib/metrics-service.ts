@@ -1,6 +1,6 @@
 // Metrics service for tracking event processing performance
 
-import logger from '@/utils/logger';
+import logger from '../utils/logger';
 
 interface Metrics {
   eventsReceived: number;
@@ -171,7 +171,7 @@ class MetricsService {
   async getDatabaseMetrics(shopDomain: string): Promise<Metrics> {
     try {
       // Get store from backend API to validate existence
-      const backendUrl = process.env.CORE_AI_SERVICE_URL || 'http://localhost:8000';
+      const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
       const storeResponse = await fetch(`${backendUrl}/api/v1/stores/domain/${shopDomain}`, {
         method: 'GET',
         headers: {

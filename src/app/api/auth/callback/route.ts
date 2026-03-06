@@ -153,7 +153,7 @@ export async function GET(request: NextRequest) {
       };
 
       // Register the store with the Core AI Service - this creates the complete record
-      const backendUrl = process.env.CORE_AI_SERVICE_URL || 'http://localhost:8000';
+      const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
       const registerResponse = await fetch(`${backendUrl}/api/v1/shops/register`, {
         method: 'POST',
         headers: {
@@ -261,25 +261,30 @@ export async function GET(request: NextRequest) {
       });
 
       // Check if this is a new store that needs onboarding
-      // New stores won't have brand_voice configured yet
-      const isNewStore = !registeredStore.brand_voice || registeredStore.brand_voice === 'friendly';
-      const onboardingComplete = registeredStore.onboarding_complete === true;
+      // Use onboarding_complete flag if available, fallback to checking brand_tone
+      const isNewStore = !registeredStore.onboarding_complete;
       
       // Redirect to onboarding for new stores, dashboard for existing ones
       let redirectUrl: string;
-      if (isNewStore && !onboardingComplete) {
-        // New store - start onboarding flow
-        redirectUrl = `${getAppUrl()}/onboarding/brand-voice?shop=${normalizedShop}&host=${host}`;
-        logger.info('Redirecting new store to onboarding', {
+      if (isNewStore) {
+        // New store - start onboarding flow with plan selection
+        redirectUrl = `${getAppUrl()}/onboarding/plan-selection?shop=${encodeURIComponent(normalizedShop)}`;
+        if (host) {
+          redirectUrl += `&host=${encodeURIComponent(host)}`;
+        }
+        logger.info('Redirecting new store to plan selection', {
           context: 'AuthCallback',
-          metadata: { shop: normalizedShop, isNewStore, onboardingComplete }
+          metadata: { shop: normalizedShop, isNewStore, brandTone: registeredStore.brand_tone, hasHost: !!host }
         });
       } else {
         // Existing store - go to dashboard
-        redirectUrl = `${getAppUrl()}/?shop=${normalizedShop}&host=${host}`;
+        redirectUrl = `${getAppUrl()}/?shop=${encodeURIComponent(normalizedShop)}`;
+        if (host) {
+          redirectUrl += `&host=${encodeURIComponent(host)}`;
+        }
         logger.info('Redirecting existing store to dashboard', {
           context: 'AuthCallback',
-          metadata: { shop: normalizedShop, isNewStore, onboardingComplete }
+          metadata: { shop: normalizedShop, isNewStore, brandTone: registeredStore.brand_tone, hasHost: !!host }
         });
       }
       

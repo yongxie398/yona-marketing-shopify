@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch AI decisions from the backend API
-    const backendUrl = process.env.CORE_AI_SERVICE_URL || 'http://localhost:8000';
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
     const response = await fetch(`${backendUrl}/api/v1/ai/decisions/${storeId}`, {
       method: 'GET',
       headers: {

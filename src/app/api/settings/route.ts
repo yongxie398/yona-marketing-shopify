@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import logger from '@/utils/logger';
 
-const BACKEND_URL = process.env.CORE_AI_SERVICE_URL || 'http://localhost:8000';
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 const API_TIMEOUT = 10000; // 10 seconds
 
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout = API_TIMEOUT): Promise<Response> {
@@ -54,10 +54,12 @@ export async function GET(request: NextRequest) {
     const store = await response.json();
     
     logger.info(`Backend returned store data for ${shopDomain}`, {
-      brand_tone: store.brand_tone,
-      frequency_caps: store.frequency_caps,
-      paused: store.paused,
-      config_updated_at: store.config_updated_at
+      metadata: {
+        brand_tone: store.brand_tone,
+        frequency_caps: store.frequency_caps,
+        paused: store.paused,
+        config_updated_at: store.config_updated_at
+      }
     });
 
     // Return the store configuration
@@ -70,6 +72,7 @@ export async function GET(request: NextRequest) {
       status: store.status,
       currency: store.currency,
       configUpdatedAt: store.config_updated_at,
+      onboarding_complete: store.onboarding_complete,
     };
 
     return new Response(JSON.stringify(storeConfig), {
@@ -98,10 +101,13 @@ export async function POST(request: NextRequest) {
 
     const updates = await request.json();
 
-    logger.info(`Updating settings for shop: ${shopDomain}`, { updates });
+    logger.info(`Updating settings for shop: ${shopDomain}`, { metadata: { updates, backendUrl: BACKEND_URL } });
 
     // Update store via backend API
-    const response = await fetchWithTimeout(`${BACKEND_URL}/api/v1/stores/domain/${shopDomain}`, {
+    const backendEndpoint = `${BACKEND_URL}/api/v1/stores/domain/${shopDomain}`;
+    logger.info(`Calling backend endpoint: ${backendEndpoint}`);
+
+    const response = await fetchWithTimeout(backendEndpoint, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
@@ -113,14 +119,15 @@ export async function POST(request: NextRequest) {
         name: updates.name,
         status: updates.status,
         currency: updates.currency,
+        onboarding_complete: updates.onboarding_complete,
         config_updated_at: new Date().toISOString(),
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      logger.error(`Failed to update store via backend API: ${errorText}`);
-      return new Response(JSON.stringify({ error: 'Failed to update store settings' }), {
+      logger.error(`Failed to update store via backend API: ${response.status} - ${errorText}`);
+      return new Response(JSON.stringify({ error: `Backend error: ${response.status} - ${errorText}` }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' },
       });
@@ -136,7 +143,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     logger.error('Error updating store settings:', error);
-    return new Response(JSON.stringify({ error: 'Failed to update store settings' }), {
+    return new Response(JSON.stringify({ error: `Failed to update store settings: ${error.message}` }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });

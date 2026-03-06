@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Query the backend API to get the store information
-    const backendUrl = process.env.CORE_AI_SERVICE_URL || 'http://localhost:8000';
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
     const response = await fetch(`${backendUrl}/api/v1/stores/domain/${shop}`, {
       method: 'GET',
       headers: {

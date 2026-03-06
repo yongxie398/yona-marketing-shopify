@@ -1,165 +1,12 @@
-// Import AICoreService as default export
-import AICoreService from '../lib/ai-core-service';
+// DEPRECATED: This file is deprecated and will be removed in a future version.
+// All webhook processing is now handled by the Redis-based EventQueue in lib/event-queue.ts
+// The webhook route (app/api/webhooks/route.ts) now uses eventQueue.enqueue() directly.
+
+import eventQueue from '../lib/event-queue';
 import { ShopifyWebhookPayload } from '../types';
 
-// Simple in-memory queue (would use Redis queue in production)
-const webhookQueue: Array<{
-  id: string;
-  topic: string;
-  shopDomain: string;
-  payload: ShopifyWebhookPayload;
-  timestamp: string;
-  processed: boolean;
-}> = [];
-
-// Dead letter queue for failed events
-const deadLetterQueue: Array<{
-  id: string;
-  topic: string;
-  shopDomain: string;
-  payload: ShopifyWebhookPayload;
-  timestamp: string;
-  error: string;
-}> = [];
-
-// Reference to the AI Core Service
-const aiCoreService = AICoreService;
-
-// Circuit breaker implementation
-class WebhookCircuitBreaker {
-  private failureCount = 0;
-  private lastFailureTime = 0;
-  private isOpen = false;
-  private readonly threshold = 5; // Number of failures before opening circuit
-  private readonly timeout = 30000; // Time in ms before attempting to close circuit
-  
-  async execute(forwardFunction: () => Promise<any>): Promise<boolean> {
-    if (this.isOpen) {
-      if (Date.now() - this.lastFailureTime > this.timeout) {
-        console.log('Circuit breaker half-open, attempting to close');
-        this.isOpen = false; // Half-open state, next call attempts to close
-      } else {
-        console.log('Circuit breaker open, failing fast');
-        return false; // Still open, fail fast
-      }
-    }
-    
-    try {
-      await forwardFunction();
-      this.reset(); // Success, reset the circuit
-      return true;
-    } catch (error) {
-      this.onFailure();
-      throw error; // Re-throw the error to be handled by the caller
-    }
-  }
-  
-  private onFailure(): void {
-    this.failureCount++;
-    this.lastFailureTime = Date.now();
-    
-    if (this.failureCount >= this.threshold) {
-      console.log('Circuit breaker opened due to failures');
-      this.isOpen = true;
-    }
-  }
-  
-  private reset(): void {
-    this.failureCount = 0;
-    this.isOpen = false;
-  }
-  
-  getStatus(): { isOpen: boolean; failureCount: number } {
-    return { isOpen: this.isOpen, failureCount: this.failureCount };
-  }
-}
-
-const circuitBreaker = new WebhookCircuitBreaker();
-
 /**
- * Process the webhook queue
- */
-async function processWebhookQueue(): Promise<void> {
-  console.log('Starting webhook worker...');
-  
-  while (true) {
-    try {
-      // Look for unprocessed items in the queue
-      const unprocessedItems = webhookQueue.filter(item => !item.processed);
-      
-      if (unprocessedItems.length > 0) {
-        // Process one item at a time
-        const item = unprocessedItems[0];
-        
-        console.log(`Processing webhook: ${item.id}`);
-        
-        // Forward to Core AI Service with circuit breaker and retry logic
-        await forwardToCoreAIWithCircuitBreakerAndRetry(item);
-        
-        // Mark as processed
-        const queueItem = webhookQueue.find(qi => qi.id === item.id);
-        if (queueItem) {
-          queueItem.processed = true;
-        }
-        
-        console.log(`Successfully processed webhook: ${item.id}`);
-      }
-      
-      // Brief pause to prevent tight loop
-      await new Promise(resolve => setTimeout(resolve, 100));
-    } catch (error) {
-      console.error('Error processing webhook queue:', error);
-      
-      // Brief pause before continuing to prevent tight loop on errors
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-  }
-}
-
-/**
- * Forward event to Core AI Service with circuit breaker and retry logic
- */
-async function forwardToCoreAIWithCircuitBreakerAndRetry(item: typeof webhookQueue[0], maxRetries: number = 3): Promise<void> {
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      // Execute with circuit breaker
-      const success = await circuitBreaker.execute(async () => {
-        // Forward the event to Core AI Service
-        await aiCoreService.forwardEvent({
-          event_type: item.topic,
-          store_id: item.shopDomain, // or actual store ID if available
-          occurred_at: item.timestamp,
-          payload: item.payload
-        });
-      });
-      
-      if (success) {
-        return; // Success, exit retry loop
-      }
-    } catch (error) {
-      console.error(`Failed to forward event (attempt ${i + 1}):`, error);
-      
-      if (i === maxRetries - 1) {
-        // Final attempt failed, move to dead letter queue
-        deadLetterQueue.push({
-          id: item.id,
-          topic: item.topic,
-          shopDomain: item.shopDomain,
-          payload: item.payload,
-          timestamp: item.timestamp,
-          error: (error as Error).message || 'Unknown error'
-        });
-        console.error(`Moved failed event to DLQ: ${item.id}`);
-        return;
-      }
-      
-      // Wait before retry (exponential backoff)
-      await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, i)));
-    }
-  }
-}
-
-/**
+ * @deprecated Use eventQueue.enqueue() from lib/event-queue.ts instead
  * Add a webhook to the queue
  */
 export function addToWebhookQueue(
@@ -167,40 +14,42 @@ export function addToWebhookQueue(
   shopDomain: string,
   payload: ShopifyWebhookPayload
 ): void {
-  const queueItem = {
-    id: crypto.randomUUID ? crypto.randomUUID() : `id-${Date.now()}-${Math.random()}`, // Fallback for crypto
-    topic,
-    shopDomain,
-    payload,
-    timestamp: new Date().toISOString(),
-    processed: false
-  };
+  console.warn('DEPRECATED: addToWebhookQueue is deprecated. Use eventQueue.enqueue() instead.');
   
-  webhookQueue.push(queueItem);
-  console.log(`Added webhook to queue: ${queueItem.id}`);
+  // Forward to the new Redis-based event queue
+  eventQueue.enqueue({
+    eventId: crypto.randomUUID ? crypto.randomUUID() : `id-${Date.now()}-${Math.random()}`,
+    storeId: shopDomain, // Note: This should be the actual store ID, not domain
+    eventType: topic,
+    payload
+  }).catch(error => {
+    console.error('Failed to enqueue event:', error);
+  });
 }
 
 /**
+ * @deprecated Use eventQueue.getStats() instead
  * Get queue metrics
  */
-export function getQueueMetrics(): { queueSize: number; dlqSize: number } {
+export async function getQueueMetrics(): Promise<{ queueSize: number; dlqSize: number }> {
+  const stats = await eventQueue.getStats();
   return {
-    queueSize: webhookQueue.filter(item => !item.processed).length,
-    dlqSize: deadLetterQueue.length
+    queueSize: stats.totalEvents,
+    dlqSize: stats.deadLetterQueue
   };
 }
 
 /**
+ * @deprecated Circuit breaker is now handled internally by event-queue.ts
  * Get circuit breaker status
  */
 export function getCircuitBreakerStatus() {
-  return circuitBreaker.getStatus();
+  console.warn('DEPRECATED: Circuit breaker status is now handled internally by event-queue.ts');
+  return { isOpen: false, failureCount: 0 };
 }
 
-// Start the worker
-processWebhookQueue().catch(error => {
-  console.error('Worker failed to start:', error);
-  process.exit(1);
-});
+// Empty arrays for backward compatibility
+export const webhookQueue: any[] = [];
+export const deadLetterQueue: any[] = [];
 
-export { webhookQueue, deadLetterQueue };
+console.log('DEPRECATED: webhook-worker.ts is deprecated. All functionality has been moved to lib/event-queue.ts with Redis support.');

@@ -167,7 +167,7 @@ class AICoreService {
   private apiKey: string;
 
   constructor() {
-    const baseUrl = process.env.CORE_AI_SERVICE_URL || 'http://localhost:8000';
+    const baseUrl = process.env.BACKEND_URL || 'http://localhost:8000';
     this.baseUrl = baseUrl.endsWith('/') ? baseUrl + 'api/v1' : baseUrl + '/api/v1';
     this.apiKey = process.env.CORE_AI_SERVICE_API_KEY || '';
   }
@@ -746,6 +746,57 @@ class AICoreService {
       });
       // Re-throw the error so callers can handle failure appropriately
       throw error;
+    }
+  }
+
+  // Attribute an order to AI messages for revenue tracking
+  async attributeOrder(orderId: string, storeId: string): Promise<any | null> {
+    try {
+      // Use the /attribute endpoint with JSON body
+      const response = await fetch(`${this.baseUrl}/attribution/attribute`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': this.apiKey,
+        },
+        body: JSON.stringify({
+          order_id: String(orderId),
+          store_id: storeId,
+        }),
+      });
+
+      if (!response.ok) {
+        // 404 means no attribution possible (no qualifying message found)
+        if (response.status === 404) {
+          logger.info('Order could not be attributed to any AI message', {
+            context: 'AICoreService',
+            metadata: { order_id: orderId, store_id: storeId }
+          });
+          return null;
+        }
+        
+        const errorData = await response.json();
+        throw new Error(`Failed to attribute order: ${errorData.detail || response.statusText}`);
+      }
+
+      const attribution = await response.json();
+      logger.info('Order attributed to AI message successfully', {
+        context: 'AICoreService',
+        metadata: { 
+          order_id: orderId, 
+          store_id: storeId,
+          message_id: attribution.message_id,
+          revenue_amount: attribution.revenue_amount
+        }
+      });
+      return attribution;
+    } catch (error) {
+      logger.error('Error attributing order to AI message', {
+        context: 'AICoreService',
+        error: error as Error,
+        metadata: { order_id: orderId, store_id: storeId }
+      });
+      return null;
     }
   }
 }

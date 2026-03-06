@@ -20,7 +20,17 @@ class Logger {
 
   private formatMessage(level: string, message: string, options: LogOptions = {}): string {
     const { context, error, metadata } = options;
-    const timestamp = new Date().toISOString();
+    const now = new Date();
+    // Format timestamp in local timezone: YYYY-MM-DD HH:mm:ss
+    const timestamp = now.toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).replace(/\//g, '-');
     let formatted = `${timestamp} [${level.toUpperCase()}]`;
     
     if (context) {

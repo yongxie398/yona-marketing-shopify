@@ -5,9 +5,7 @@ interface EnvConfig {
   SHOPIFY_API_SECRET: string;
   SHOPIFY_APP_URL: string;
   NEXT_PUBLIC_SHOPIFY_API_KEY: string;
-  CORE_AI_SERVICE_URL: string;
-  CORE_AI_SERVICE_API_KEY: string;
-  BACKEND_API_URL: string;
+  BACKEND_URL: string;
   DATABASE_URL?: string;
   DB_USER?: string;
   DB_HOST?: string;
@@ -42,9 +40,7 @@ export function validateEnvironment(): void {
     'SHOPIFY_API_SECRET',
     'SHOPIFY_APP_URL',
     'NEXT_PUBLIC_SHOPIFY_API_KEY',
-    'CORE_AI_SERVICE_URL',
-    'CORE_AI_SERVICE_API_KEY',
-    'BACKEND_API_URL'
+    'BACKEND_URL'
   ];
 
   for (const varName of requiredVars) {
@@ -61,9 +57,7 @@ export default {
   SHOPIFY_API_SECRET: getEnvVar('SHOPIFY_API_SECRET'),
   SHOPIFY_APP_URL: getEnvVar('SHOPIFY_APP_URL'),
   NEXT_PUBLIC_SHOPIFY_API_KEY: getEnvVar('NEXT_PUBLIC_SHOPIFY_API_KEY'),
-  CORE_AI_SERVICE_URL: getEnvVar('CORE_AI_SERVICE_URL'),
-  CORE_AI_SERVICE_API_KEY: getEnvVar('CORE_AI_SERVICE_API_KEY'),
-  BACKEND_API_URL: getEnvVar('BACKEND_API_URL'),
+  BACKEND_URL: getEnvVar('BACKEND_URL'),
   DATABASE_URL: getOptionalEnvVar('DATABASE_URL'),
   DB_USER: getOptionalEnvVar('DB_USER', 'postgres'),
   DB_HOST: getOptionalEnvVar('DB_HOST', 'localhost'),

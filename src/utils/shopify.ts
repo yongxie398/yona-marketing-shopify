@@ -50,7 +50,7 @@ export function removeFromCache(key: string): void {
  */
 export async function getShopifyAccessToken(shopDomain: string): Promise<string> {
   // Get store from backend API to get the access token
-  const backendUrl = process.env.CORE_AI_SERVICE_URL || 'http://localhost:8000';
+  const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
   const response = await fetch(`${backendUrl}/api/v1/stores/domain/${shopDomain}`, {
     method: 'GET',
     headers: {

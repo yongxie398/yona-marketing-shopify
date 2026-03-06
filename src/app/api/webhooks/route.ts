@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     });
     
     // Find store in backend API
-    const backendUrl = process.env.CORE_AI_SERVICE_URL || 'http://localhost:8000';
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
     const storeResponse = await fetch(`${backendUrl}/api/v1/stores/domain/${shop}`, {
       method: 'GET',
       headers: {
@@ -107,6 +107,10 @@ export async function POST(request: NextRequest) {
         });
       }
     }
+    
+    // Note: Order attribution is now handled in the backend event processor
+    // after the order is created in the database. This ensures the order exists
+    // before attempting attribution, avoiding race conditions.
     
     // Add the event to the queue for processing by the AI engine (best practice)
     await eventQueue.enqueue({

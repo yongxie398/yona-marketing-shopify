@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     }
     
     // Validate store exists by calling backend API
-    const backendUrl = process.env.CORE_AI_SERVICE_URL || 'http://localhost:8000';
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
     const storeResponse = await fetch(`${backendUrl}/api/v1/stores/domain/${shopDomain}`, {
       method: 'GET',
       headers: {

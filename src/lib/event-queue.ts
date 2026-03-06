@@ -1,39 +1,113 @@
-// Event queuing system for reliable event processing
-
-import logger from '@/utils/logger';
+import logger from '../utils/logger';
 import aiCoreService from './ai-core-service';
 import metricsService from './metrics-service';
 
 interface QueuedEvent {
   id: string;
-  eventId: string; // Original event ID from database
+  eventId: string;
   storeId: string;
   eventType: string;
   payload: any;
-  createdAt: Date;
+  source?: string;
+  createdAt: string;
   retries: number;
-  nextRetryAt?: Date;
+  nextRetryAt?: string;
 }
 
 class EventQueue {
-  private queue: QueuedEvent[] = [];
-  private isProcessing: boolean = false;
+  private client: any = null;
+  private readonly QUEUE_NAME = 'webhook-events';
+  private readonly DLQ_NAME = 'webhook-dlq';
   private readonly MAX_RETRIES: number = 5;
-  private readonly RETRY_DELAY: number = 60000; // 1 minute
-  private readonly PROCESSING_BATCH_SIZE: number = 10;
+  private readonly RETRY_DELAY: number = 60000;
+  private isProcessing: boolean = false;
+  private processingInterval: NodeJS.Timeout | null = null;
+  private redisAvailable: boolean = false;
+  private memoryQueue: QueuedEvent[] = [];
+  private memoryDLQ: QueuedEvent[] = [];
 
   constructor() {
-    // Start processing queue every 5 seconds
-    setInterval(() => this.processQueue(), 5000);
+    this.initializeRedis();
+    this.processingInterval = setInterval(() => this.processQueue(), 5000);
     logger.info('EventQueue initialized', { context: 'EventQueue' });
   }
 
-  // Add event to queue
+  private initializeRedis(): void {
+    try {
+      const { createClient } = require('redis');
+      
+      const redisHost = process.env.REDIS_CLOUD_HOST;
+      const redisPort = parseInt(process.env.REDIS_CLOUD_PORT || '6379');
+      const redisUsername = process.env.REDIS_CLOUD_USERNAME;
+      const redisPassword = process.env.REDIS_CLOUD_PASSWORD;
+      
+      let clientConfig: any;
+      
+      if (redisHost && redisPassword) {
+        logger.info('Using Redis Cloud configuration', { context: 'EventQueue' });
+        clientConfig = {
+          socket: {
+            host: redisHost,
+            port: redisPort,
+          },
+          username: redisUsername || 'default',
+          password: redisPassword,
+          database: 0,
+          disableOfflineQueue: false,
+        };
+      } else {
+        logger.info('Using local Redis configuration (fallback)', { context: 'EventQueue' });
+        const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+        clientConfig = {
+          url: redisUrl
+        };
+        
+        const localRedisPassword = process.env.REDIS_PASSWORD;
+        if (localRedisPassword) {
+          clientConfig.password = localRedisPassword;
+        }
+      }
+      
+      this.client = createClient(clientConfig);
+      this.redisAvailable = true;
+      
+      this.client.on('error', (err: Error) => {
+        logger.error('Redis Client Error', { context: 'EventQueue', error: err });
+      });
+      
+      this.client.on('connect', () => {
+        logger.info('Redis connected', { context: 'EventQueue' });
+      });
+      
+      this.client.on('ready', () => {
+        logger.info('Redis ready', { context: 'EventQueue' });
+      });
+
+      logger.info('EventQueue initialized with Redis backend', { context: 'EventQueue' });
+    } catch (error) {
+      logger.warn('Redis not available, using in-memory queue (not recommended for production)', { 
+        context: 'EventQueue',
+        error: error as Error 
+      });
+      this.redisAvailable = false;
+    }
+  }
+
+  private async connect(): Promise<void> {
+    if (!this.redisAvailable || !this.client) {
+      return;
+    }
+    if (!this.client.isOpen) {
+      await this.client.connect();
+    }
+  }
+
   async enqueue(event: {
-    eventId: string; // Original event ID from database
+    eventId: string;
     storeId: string;
     eventType: string;
     payload: any;
+    source?: string;
   }): Promise<void> {
     const queuedEvent: QueuedEvent = {
       id: `${event.eventType}-${event.storeId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -41,51 +115,123 @@ class EventQueue {
       storeId: event.storeId,
       eventType: event.eventType,
       payload: event.payload,
-      createdAt: new Date(),
+      source: event.source,
+      createdAt: new Date().toISOString(),
       retries: 0
     };
 
-    this.queue.push(queuedEvent);
-    logger.debug('Event added to queue', {
-      context: 'EventQueue',
-      metadata: { eventId: queuedEvent.id, eventType: queuedEvent.eventType, storeId: queuedEvent.storeId }
-    });
+    if (this.redisAvailable && this.client) {
+      try {
+        await this.connect();
+        await this.client.lPush(this.QUEUE_NAME, JSON.stringify(queuedEvent));
+        logger.debug('Event added to Redis queue', {
+          context: 'EventQueue',
+          metadata: { eventId: queuedEvent.id, eventType: queuedEvent.eventType, storeId: queuedEvent.storeId }
+        });
+      } catch (error) {
+        logger.error('Failed to add event to Redis, falling back to memory queue', {
+          context: 'EventQueue',
+          error: error as Error
+        });
+        this.memoryQueue.push(queuedEvent);
+      }
+    } else {
+      this.memoryQueue.push(queuedEvent);
+      logger.debug('Event added to memory queue', {
+        context: 'EventQueue',
+        metadata: { eventId: queuedEvent.id, eventType: queuedEvent.eventType, storeId: queuedEvent.storeId }
+      });
+    }
     
-    // Update queue size metric
-    metricsService.updateQueueSize(this.queue.length);
+    const queueSize = await this.getQueueSize();
+    metricsService.updateQueueSize(queueSize);
 
-    // Process queue immediately if not already processing
     if (!this.isProcessing) {
       this.processQueue();
     }
   }
 
-  // Process events in queue
   private async processQueue(): Promise<void> {
-    if (this.isProcessing || this.queue.length === 0) {
+    if (this.isProcessing) {
       return;
     }
 
     this.isProcessing = true;
-    logger.debug(`Processing ${this.queue.length} events from queue`, { context: 'EventQueue' });
-
+    
     try {
-      // Get next batch of events to process
-      const batch = this.queue.slice(0, this.PROCESSING_BATCH_SIZE);
+      const queueSize = await this.getQueueSize();
       
-      // Process events in parallel
-      await Promise.allSettled(batch.map(event => this.processEvent(event)));
+      if (queueSize === 0) {
+        this.isProcessing = false;
+        return;
+      }
       
-      // Remove processed events from queue
-      this.queue = this.queue.filter(event => 
-        !batch.some(batchEvent => batchEvent.id === event.id)
+      logger.debug(`Processing events from queue (size: ${queueSize})`, { context: 'EventQueue' });
+
+      const batchSize = Math.min(10, queueSize);
+      const eventsToProcess: QueuedEvent[] = [];
+      
+      if (this.redisAvailable && this.client) {
+        await this.connect();
+        for (let i = 0; i < batchSize; i++) {
+          const result = await this.client.rPop(this.QUEUE_NAME);
+          if (result) {
+            eventsToProcess.push(JSON.parse(result));
+          }
+        }
+      } else {
+        for (let i = 0; i < batchSize && this.memoryQueue.length > 0; i++) {
+          const event = this.memoryQueue.shift();
+          if (event) {
+            eventsToProcess.push(event);
+          }
+        }
+      }
+      
+      if (eventsToProcess.length === 0) {
+        this.isProcessing = false;
+        return;
+      }
+      
+      const results = await Promise.allSettled(
+        eventsToProcess.map(event => this.processEvent(event))
       );
       
-      // Update queue size metric
-      metricsService.updateQueueSize(this.queue.length);
+      for (let i = 0; i < results.length; i++) {
+        const result = results[i];
+        const event = eventsToProcess[i];
+        
+        if (result.status === 'rejected') {
+          event.retries += 1;
+          
+          if (event.retries >= this.MAX_RETRIES) {
+            if (this.redisAvailable && this.client) {
+              await this.client.lPush(this.DLQ_NAME, JSON.stringify(event));
+            } else {
+              this.memoryDLQ.push(event);
+            }
+            logger.error(`Event ${event.id} moved to DLQ after ${this.MAX_RETRIES} failures`, {
+              context: 'EventQueue',
+              metadata: { eventId: event.eventId, storeId: event.storeId, eventType: event.eventType }
+            });
+          } else {
+            event.nextRetryAt = new Date(Date.now() + this.RETRY_DELAY * Math.pow(2, event.retries - 1)).toISOString();
+            if (this.redisAvailable && this.client) {
+              await this.client.lPush(this.QUEUE_NAME, JSON.stringify(event));
+            } else {
+              this.memoryQueue.push(event);
+            }
+            logger.warn(`Event ${event.id} requeued for retry ${event.retries}/${this.MAX_RETRIES}`, {
+              context: 'EventQueue',
+              metadata: { eventId: event.eventId, storeId: event.storeId, retries: event.retries }
+            });
+          }
+        }
+      }
       
-      // Requeue failed events with retry logic
-      this.requeueFailedEvents();
+      const newQueueSize = await this.getQueueSize();
+      metricsService.updateQueueSize(newQueueSize);
+      
     } catch (error) {
       logger.error('Error processing event queue', {
         context: 'EventQueue',
@@ -93,22 +239,15 @@ class EventQueue {
       });
     } finally {
       this.isProcessing = false;
-      
-      // If there are still events left, process them
-      if (this.queue.length > 0) {
-        this.processQueue();
-      }
     }
   }
 
-  // Process a single event
   private async processEvent(event: QueuedEvent): Promise<void> {
     const startTime = Date.now();
     let shopDomain = '';
     
     try {
-      // Get store information from backend API to get the shop domain
-      const backendUrl = process.env.CORE_AI_SERVICE_URL || 'http://localhost:8000';
+      const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
       const storeResponse = await fetch(`${backendUrl}/api/v1/stores/${event.storeId}`, {
         method: 'GET',
         headers: {
@@ -126,7 +265,6 @@ class EventQueue {
         metadata: { eventType: event.eventType, storeId: event.storeId, eventId: event.eventId, shopDomain }
       });
 
-      // Forward event to Core AI Service
       await aiCoreService.forwardEvent({
         event_type: event.eventType,
         store_id: event.storeId,
@@ -145,74 +283,64 @@ class EventQueue {
         metadata: { eventType: event.eventType, storeId: event.storeId, eventId: event.eventId, shopDomain, processingTime }
       });
       
-      // Record successful processing with shop domain
       metricsService.recordEventProcessed(shopDomain, processingTime);
-      
-      // Update queue size metric
-      metricsService.updateQueueSize(this.queue.length);
     } catch (error) {
-      event.retries += 1;
       const processingTime = Date.now() - startTime;
       
-      logger.error(`Failed to process event ${event.id} (original event ID: ${event.eventId}) (attempt ${event.retries}/${this.MAX_RETRIES})`, {
+      logger.error(`Failed to process event ${event.id} (original event ID: ${event.eventId})`, {
         context: 'EventQueue',
         error: error as Error,
-        metadata: { eventType: event.eventType, storeId: event.storeId, eventId: event.eventId, shopDomain, processingTime, retries: event.retries }
+        metadata: { eventType: event.eventType, storeId: event.storeId, eventId: event.eventId, shopDomain, processingTime }
       });
       
-      // Record failed processing with shop domain
       metricsService.recordEventFailed(shopDomain);
       metricsService.recordEventRetried(shopDomain);
       
-      // If max retries reached, log as failed
-      if (event.retries >= this.MAX_RETRIES) {
-        logger.error(`Event ${event.id} (original event ID: ${event.eventId}) failed after ${this.MAX_RETRIES} attempts, marking as failed`, {
-          context: 'EventQueue',
-          metadata: { eventType: event.eventType, storeId: event.storeId, eventId: event.eventId, shopDomain }
-        });
-        // TODO: Implement dead letter queue or failed event storage
-      } else {
-        // Schedule next retry
-        event.nextRetryAt = new Date(Date.now() + this.RETRY_DELAY * Math.pow(2, event.retries - 1)); // Exponential backoff
-      }
+      throw error;
     }
   }
 
-  // Requeue failed events with scheduled retry times
-  private requeueFailedEvents(): void {
-    const now = new Date();
-    const readyToRetry = this.queue.filter(event => 
-      event.nextRetryAt && event.nextRetryAt <= now
-    );
-
-    if (readyToRetry.length > 0) {
-      logger.debug(`Requeueing ${readyToRetry.length} events for retry`, { context: 'EventQueue' });
-      // Move ready-to-retry events to front of queue
-      this.queue = [...readyToRetry, ...this.queue.filter(event => 
-        !readyToRetry.some(retryEvent => retryEvent.id === event.id)
-      )];
-      
-      // Update queue size metric
-      metricsService.updateQueueSize(this.queue.length);
+  async getQueueSize(): Promise<number> {
+    if (this.redisAvailable && this.client) {
+      await this.connect();
+      return await this.client.lLen(this.QUEUE_NAME);
     }
+    return this.memoryQueue.length;
   }
 
-  // Get queue statistics
-  getStats(): {
+  async getDLQSize(): Promise<number> {
+    if (this.redisAvailable && this.client) {
+      await this.connect();
+      return await this.client.lLen(this.DLQ_NAME);
+    }
+    return this.memoryDLQ.length;
+  }
+
+  async getStats(): Promise<{
     totalEvents: number;
-    pendingEvents: number;
-    readyToRetry: number;
-  } {
-    const now = new Date();
-    const readyToRetry = this.queue.filter(event => 
-      event.nextRetryAt && event.nextRetryAt <= now
-    ).length;
+    deadLetterQueue: number;
+  }> {
+    const [totalEvents, deadLetterQueue] = await Promise.all([
+      this.getQueueSize(),
+      this.getDLQSize()
+    ]);
 
     return {
-      totalEvents: this.queue.length,
-      pendingEvents: this.queue.length - readyToRetry,
-      readyToRetry
+      totalEvents,
+      deadLetterQueue
     };
+  }
+
+  async shutdown(): Promise<void> {
+    if (this.processingInterval) {
+      clearInterval(this.processingInterval);
+    }
+    
+    if (this.redisAvailable && this.client && this.client.isOpen) {
+      await this.client.quit();
+    }
+    
+    logger.info('EventQueue shut down gracefully', { context: 'EventQueue' });
   }
 }
 

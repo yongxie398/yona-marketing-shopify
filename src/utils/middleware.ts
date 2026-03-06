@@ -64,7 +64,7 @@ export async function authenticateShopifyRequest(request: NextRequest): Promise<
   shop = shop.endsWith('.myshopify.com') ? shop : `${shop}.myshopify.com`;
   
   // Validate store exists by calling backend API
-  const backendUrl = process.env.CORE_AI_SERVICE_URL || 'http://localhost:8000';
+  const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
   const storeResponse = await fetch(`${backendUrl}/api/v1/stores/domain/${shop}`, {
     method: 'GET',
     headers: {

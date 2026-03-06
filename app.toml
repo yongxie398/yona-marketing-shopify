@@ -21,3 +21,9 @@ api_version = "2026-01"
 [commands]
 # Use these commands to run your app in development (optional)
 dev = "npm run dev"
+
+[extensions]
+# Theme app extension for storefront tracking
+# Run: shopify app deploy to deploy extensions
+[[extensions]]
+path = "extensions/theme-app-extension"

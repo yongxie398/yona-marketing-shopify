@@ -1,39 +1,24 @@
-let getQueueMetrics: () => { queueSize: number; dlqSize: number };
-let getCircuitBreakerStatus: () => { isOpen: boolean; failureCount: number };
-
-async function loadWorker() {
-  const worker = await import('../workers/webhook-worker');
-  getQueueMetrics = worker.getQueueMetrics;
-  getCircuitBreakerStatus = worker.getCircuitBreakerStatus;
-}
+import eventQueue from '../lib/event-queue';
 
 /**
  * Monitor webhook processing metrics
  */
 export async function monitorWebhookMetrics(): Promise<void> {
-  await loadWorker();
-
-  setInterval(() => {
+  setInterval(async () => {
     try {
-      const { queueSize, dlqSize } = getQueueMetrics();
-      const circuitStatus = getCircuitBreakerStatus();
+      const stats = await eventQueue.getStats();
       
       console.log(`Webhook Queue Metrics:`);
-      console.log(`  Active Queue Size: ${queueSize}`);
-      console.log(`  Dead Letter Queue Size: ${dlqSize}`);
-      console.log(`  Circuit Breaker Status: ${circuitStatus.isOpen ? 'OPEN' : 'CLOSED'} (${circuitStatus.failureCount} failures)`);
+      console.log(`  Active Queue Size: ${stats.totalEvents}`);
+      console.log(`  Dead Letter Queue Size: ${stats.deadLetterQueue}`);
       
       // Alert if queue size grows too large
-      if (queueSize > 1000) {
-        console.warn(`WARNING: Large webhook queue size: ${queueSize}`);
+      if (stats.totalEvents > 1000) {
+        console.warn(`WARNING: Large webhook queue size: ${stats.totalEvents}`);
       }
       
-      if (dlqSize > 0) {
-        console.warn(`WARNING: Dead letter queue has ${dlqSize} events`);
-      }
-      
-      if (circuitStatus.isOpen) {
-        console.warn(`WARNING: Circuit breaker is OPEN`);
+      if (stats.deadLetterQueue > 0) {
+        console.warn(`WARNING: Dead letter queue has ${stats.deadLetterQueue} events`);
       }
     } catch (error) {
       console.error('Error monitoring webhook metrics:', error);

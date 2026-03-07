@@ -1,0 +1,16 @@
+# Theme App Extension Configuration
+# Learn more: https://shopify.dev/docs/apps/online-store/theme-app-extensions
+
+name = "AI Revenue Agent Tracking"
+type = "theme"
+
+# Extension capabilities
+capabilities = {
+  # Enable block targeting for precise placement
+  block_targeting = true
+}
+
+# Available extension points
+[[extension_points]]
+target = "body"
+module = "blocks/tracking.liquid"

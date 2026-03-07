@@ -1,0 +1,216 @@
+{% comment %}
+  AI Revenue Agent - Customer Activity Tracking
+  
+  This block tracks customer interactions on the storefront:
+  - Product views
+  - Add to cart
+  - Checkout started
+  - Page navigation
+  
+  Place this block in your theme's body section for global tracking.
+{% endcomment %}
+
+<script>
+(function() {
+  'use strict';
+  
+  // Configuration - will be populated by app
+  const CONFIG = {
+    apiEndpoint: '{{ block.settings.api_endpoint | default: "https://your-app-domain.com/api/events" }}',
+    storeId: '{{ shop.id }}',
+    storeDomain: '{{ shop.domain }}',
+    customerId: '{{ customer.id | default: "" }}',
+    customerEmail: '{{ customer.email | default: "" }}',
+    sessionId: generateSessionId(),
+    debug: {{ block.settings.debug_mode | default: false }}
+  };
+  
+  // Generate unique session ID
+  function generateSessionId() {
+    return 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+  }
+  
+  // Debug logging
+  function log(message, data) {
+    if (CONFIG.debug) {
+      console.log('[AI Revenue Agent]', message, data || '');
+    }
+  }
+  
+  // Send event to backend
+  async function sendEvent(eventType, payload) {
+    try {
+      const eventData = {
+        event_type: eventType,
+        store_id: CONFIG.storeId,
+        store_domain: CONFIG.storeDomain,
+        customer_id: CONFIG.customerId || null,
+        customer_email: CONFIG.customerEmail || null,
+        session_id: CONFIG.sessionId,
+        timestamp: new Date().toISOString(),
+        page_url: window.location.href,
+        user_agent: navigator.userAgent,
+        payload: payload
+      };
+      
+      log('Sending event:', eventData);
+      
+      const response = await fetch(CONFIG.apiEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(eventData),
+        keepalive: true
+      });
+      
+      if (!response.ok) {
+        log('Event send failed:', response.status);
+      } else {
+        log('Event sent successfully:', eventType);
+      }
+    } catch (error) {
+      log('Error sending event:', error);
+    }
+  }
+  
+  // Track product view
+  function trackProductView() {
+    const productData = window.ShopifyAnalytics && window.ShopifyAnalytics.meta && window.ShopifyAnalytics.meta.product;
+    
+    if (productData) {
+      sendEvent('product_view', {
+        product_id: productData.id,
+        product_title: productData.title,
+        product_type: productData.type,
+        product_vendor: productData.vendor,
+        product_price: productData.price,
+        product_sku: productData.sku,
+        variant_id: productData.variantId,
+        currency: window.ShopifyAnalytics.meta.currency
+      });
+    } else {
+      // Fallback: try to extract from page
+      const productJson = document.getElementById('ProductJson-product-template');
+      if (productJson) {
+        try {
+          const product = JSON.parse(productJson.textContent);
+          sendEvent('product_view', {
+            product_id: product.id,
+            product_title: product.title,
+            product_type: product.product_type,
+            product_vendor: product.vendor,
+            product_price: product.price,
+            currency: window.Shopify && window.Shopify.currency && window.Shopify.currency.active
+          });
+        } catch (e) {
+          log('Failed to parse product data');
+        }
+      }
+    }
+  }
+  
+  // Track add to cart
+  function trackAddToCart(productId, variantId, quantity, price) {
+    sendEvent('add_to_cart', {
+      product_id: productId,
+      variant_id: variantId,
+      quantity: quantity,
+      price: price,
+      currency: window.Shopify && window.Shopify.currency && window.Shopify.currency.active
+    });
+  }
+  
+  // Track checkout started
+  function trackCheckoutStarted() {
+    sendEvent('checkout_started', {
+      cart_token: window.Shopify && window.Shopify.checkout && window.Shopify.checkout.token,
+      cart_value: window.Shopify && window.Shopify.checkout && window.Shopify.checkout.total_price
+    });
+  }
+  
+  // Track page view
+  function trackPageView() {
+    sendEvent('page_view', {
+      page_type: {{ template | json }},
+      page_title: document.title,
+      referrer: document.referrer
+    });
+  }
+  
+  // Initialize tracking
+  function init() {
+    log('Initializing AI Revenue Agent tracking');
+    
+    // Track initial page view
+    trackPageView();
+    
+    // Track product view on product pages
+    if ({{ template | json }} === 'product') {
+      trackProductView();
+    }
+    
+    // Track checkout page
+    if ({{ template | json }} === 'cart' || window.location.pathname.includes('/checkout')) {
+      trackCheckoutStarted();
+    }
+    
+    // Intercept add to cart buttons
+    document.addEventListener('click', function(e) {
+      const addToCartBtn = e.target.closest('[data-add-to-cart], [name="add"], .add-to-cart, #AddToCart');
+      if (addToCartBtn) {
+        const form = addToCartBtn.closest('form');
+        if (form) {
+          const productId = form.querySelector('[name="id"]')?.value;
+          const quantity = form.querySelector('[name="quantity"]')?.value || 1;
+          
+          // Get price from product data
+          const productData = window.ShopifyAnalytics && window.ShopifyAnalytics.meta && window.ShopifyAnalytics.meta.product;
+          const price = productData ? productData.price : null;
+          
+          trackAddToCart(productId, productId, parseInt(quantity), price);
+        }
+      }
+    });
+    
+    // Listen for Shopify cart events
+    document.addEventListener('cart:updated', function(e) {
+      if (e.detail && e.detail.variant_id) {
+        trackAddToCart(null, e.detail.variant_id, e.detail.quantity, e.detail.price);
+      }
+    });
+    
+    log('Tracking initialized');
+  }
+  
+  // Run when DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+
+{% schema %}
+{
+  "name": "AI Revenue Agent Tracking",
+  "target": "body",
+  "settings": [
+    {
+      "type": "text",
+      "id": "api_endpoint",
+      "label": "API Endpoint",
+      "default": "https://your-app-domain.com/api/events",
+      "info": "The endpoint where tracking events will be sent"
+    },
+    {
+      "type": "checkbox",
+      "id": "debug_mode",
+      "label": "Debug Mode",
+      "default": false,
+      "info": "Enable console logging for debugging"
+    }
+  ]
+}
+{% endschema %}

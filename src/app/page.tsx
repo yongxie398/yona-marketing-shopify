@@ -36,6 +36,7 @@ import {
   Calendar
 } from 'lucide-react';
 import { ExperimentResults } from '@/components/ExperimentResults';
+import FirstSaleCelebration from '@/components/FirstSaleCelebration';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -898,12 +899,60 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<'overview' | 'campaigns' | 'abtesting'>('overview');
   const [shopDomain, setShopDomain] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showFirstSale, setShowFirstSale] = useState(false);
+  const [firstSaleData, setFirstSaleData] = useState({
+    saleAmount: 0,
+    customerName: 'Customer',
+    recoveryTime: 'Just now',
+    campaign: 'Cart Recovery',
+  });
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    setShopDomain(urlParams.get('shop'));
+    const shop = urlParams.get('shop');
+    setShopDomain(shop);
     setLoading(false);
+
+    // Check for first sale celebration
+    if (shop) {
+      checkFirstSale(shop);
+    }
   }, []);
+
+  const checkFirstSale = async (shop: string) => {
+    try {
+      console.log('Checking first sale for shop:', shop);
+      const response = await fetch(`/api/first-sale?shop=${encodeURIComponent(shop)}`);
+      console.log('First sale API response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('First sale data:', data);
+        
+        if (data.isFirstSale) {
+          console.log('First sale detected! Showing celebration...');
+          setFirstSaleData({
+            saleAmount: data.saleAmount,
+            customerName: data.customerName,
+            recoveryTime: data.recoveryTime,
+            campaign: data.campaign,
+          });
+          setShowFirstSale(true);
+          // Mark celebration as shown
+          await fetch(`/api/first-sale?shop=${encodeURIComponent(shop)}`, {
+            method: 'POST',
+          });
+        } else {
+          console.log('Not a first sale or already shown');
+        }
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('First sale API error:', errorData);
+      }
+    } catch (error) {
+      console.error('Error checking first sale:', error);
+    }
+  };
 
   if (loading) {
     return (
@@ -1010,7 +1059,76 @@ export default function DashboardPage() {
             <ABTestingOverview timeRange={timeRange} />
           </TabsContent>
         </Tabs>
+
+        {/* Test First Sale Celebration Button */}
+        <button
+          onClick={async () => {
+            console.log('Test button clicked, shopDomain:', shopDomain);
+            if (!shopDomain) {
+              alert('No shop domain found. Please make sure you have a ?shop= parameter in the URL.');
+              return;
+            }
+            try {
+              // Simulate first sale via API
+              console.log('Simulating first sale for:', shopDomain);
+              const response = await fetch(`/api/first-sale?shop=${encodeURIComponent(shopDomain)}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  amount: 127.50,
+                  customerName: 'Sarah Johnson',
+                  recoveryTime: '15 minutes',
+                  campaign: 'Cart Abandonment'
+                })
+              });
+              console.log('PUT response status:', response.status);
+              const putData = await response.json().catch(() => ({}));
+              console.log('PUT response data:', putData);
+              
+              if (response.ok) {
+                // Trigger the celebration
+                console.log('Simulation successful, triggering checkFirstSale...');
+                await checkFirstSale(shopDomain);
+              } else {
+                alert('Failed to simulate first sale: ' + (putData.error || 'Unknown error'));
+              }
+            } catch (error) {
+              console.error('Error:', error);
+              alert('Error simulating first sale: ' + error);
+            }
+          }}
+          className="fixed bottom-4 right-4 z-40 px-4 py-2 bg-amber-600 text-white text-sm font-medium rounded-lg shadow-lg hover:bg-amber-700 transition-colors"
+        >
+          🎉 Test First Sale
+        </button>
+
+        {/* Force Show Celebration Button (for testing UI) */}
+        <button
+          onClick={() => {
+            console.log('Force showing celebration');
+            setFirstSaleData({
+              saleAmount: 127.50,
+              customerName: 'Sarah Johnson',
+              recoveryTime: '15 minutes',
+              campaign: 'Cart Abandonment'
+            });
+            setShowFirstSale(true);
+          }}
+          className="fixed bottom-4 right-40 z-40 px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg shadow-lg hover:bg-purple-700 transition-colors"
+        >
+          🎊 Force Show
+        </button>
       </main>
+
+      {/* First Sale Celebration */}
+      <FirstSaleCelebration
+        open={showFirstSale}
+        onClose={() => setShowFirstSale(false)}
+        saleAmount={firstSaleData.saleAmount}
+        customerName={firstSaleData.customerName}
+        recoveryTime={firstSaleData.recoveryTime}
+        campaign={firstSaleData.campaign}
+      />
     </div>
   );
 }

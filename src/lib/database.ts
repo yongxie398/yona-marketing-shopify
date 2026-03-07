@@ -13,6 +13,15 @@ export interface Store {
   status?: string;
   created_at: Date;
   config_updated_at: Date;
+  // First sale celebration fields
+  first_sale_recovered?: boolean;
+  first_sale_celebration_shown?: boolean;
+  first_sale_amount?: number;
+  first_sale_customer_name?: string;
+  first_sale_recovery_time?: string;
+  first_sale_campaign?: string;
+  first_sale_recovered_at?: Date;
+  first_sale_celebration_shown_at?: Date;
 }
 
 export interface CommerceEvent {

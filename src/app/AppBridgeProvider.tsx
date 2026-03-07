@@ -101,7 +101,7 @@ export const useSessionToken = () => {
         });
         
         const sessionToken = await Promise.race([
-          getSessionToken(appBridge),
+          getSessionToken(appBridge as any),
           timeoutPromise
         ]) as string;
         

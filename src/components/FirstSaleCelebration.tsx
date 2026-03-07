@@ -1,17 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Trophy, DollarSign, User, Clock, Share2, X, Target } from 'lucide-react';
-
-interface FirstSaleData {
-  order_id: string;
-  customer_email: string;
-  customer_name?: string;
-  revenue: number;
-  recovery_time_hours: number;
-  message_preview: string;
-  campaign_type: string;
-}
+import { Trophy, DollarSign, User, Clock, X, ArrowRight } from 'lucide-react';
 
 interface FirstSaleCelebrationProps {
   open: boolean;
@@ -27,35 +17,39 @@ export default function FirstSaleCelebration({
   onClose, 
   saleAmount = 127.50,
   customerName = "Sarah Johnson",
-  recoveryTime = "2 hours 34 minutes",
+  recoveryTime = "15 minutes",
   campaign = "Cart Abandonment"
 }: FirstSaleCelebrationProps) {
   const [showConfetti, setShowConfetti] = useState(false);
+  const [displayAmount, setDisplayAmount] = useState(0);
 
   useEffect(() => {
     if (open) {
       setShowConfetti(true);
-      const timer = setTimeout(() => setShowConfetti(false), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [open]);
+      // Animate the amount counting up
+      const duration = 800;
+      const steps = 30;
+      const increment = saleAmount / steps;
+      let current = 0;
+      const timer = setInterval(() => {
+        current += increment;
+        if (current >= saleAmount) {
+          setDisplayAmount(saleAmount);
+          clearInterval(timer);
+        } else {
+          setDisplayAmount(current);
+        }
+      }, duration / steps);
 
-  const handleShare = () => {
-    const shareText = `Just recovered my first sale with Yona AI! 💰 $${saleAmount.toFixed(2)} in revenue automatically recovered. 🎉`;
-    
-    if (navigator.share) {
-      navigator.share({
-        title: "Yona AI First Win!",
-        text: shareText,
-      }).catch(() => {
-        navigator.clipboard.writeText(shareText);
-        alert("Copied to clipboard!");
-      });
-    } else {
-      navigator.clipboard.writeText(shareText);
-      alert("Copied to clipboard!");
+      // Auto-hide confetti
+      const confettiTimer = setTimeout(() => setShowConfetti(false), 3000);
+      
+      return () => {
+        clearInterval(timer);
+        clearTimeout(confettiTimer);
+      };
     }
-  };
+  }, [open, saleAmount]);
 
   if (!open) return null;
 
@@ -64,10 +58,12 @@ export default function FirstSaleCelebration({
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
         
+        {/* Modal - Fixed size, no scroll */}
         <div className="relative z-10 w-full max-w-[480px] overflow-hidden rounded-2xl border-0 bg-white shadow-2xl">
+          {/* Confetti Background */}
           {showConfetti && (
             <div className="pointer-events-none absolute inset-0 overflow-hidden">
-              {Array.from({ length: 50 }).map((_, i) => (
+              {Array.from({ length: 40 }).map((_, i) => (
                 <div
                   key={i}
                   className="absolute animate-confetti"
@@ -79,7 +75,7 @@ export default function FirstSaleCelebration({
                   }}
                 >
                   <div
-                    className="h-3 w-3 rounded-full"
+                    className="h-2.5 w-2.5 rounded-full"
                     style={{
                       backgroundColor: [
                         "#10b981",
@@ -95,91 +91,66 @@ export default function FirstSaleCelebration({
             </div>
           )}
 
+          {/* Close Button */}
           <button
             onClick={onClose}
-            className="absolute right-4 top-4 z-10 rounded-full p-2 transition-colors hover:bg-gray-100"
+            className="absolute right-3 top-3 z-10 rounded-full p-1.5 transition-colors hover:bg-gray-100"
           >
-            <X className="h-5 w-5 text-gray-500" />
+            <X className="h-4 w-4 text-gray-400" />
           </button>
 
-          <div className="relative bg-gradient-to-br from-emerald-50 via-white to-blue-50 p-8">
-            <div className="mb-6 text-center">
-              <div className="mb-4 inline-flex h-20 w-20 animate-bounce items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 shadow-lg">
-                <Trophy className="h-10 w-10 text-white" />
-              </div>
-              <h2 className="mb-2 text-3xl font-bold text-gray-900">
-                🎉 CONGRATULATIONS! 🎉
-              </h2>
-              <p className="text-lg font-semibold text-gray-700">
-                🏆 First Win Achievement Unlocked!
-              </p>
-              <p className="mt-2 text-gray-600">
-                You just recovered your first sale!
-              </p>
+          {/* Content - Compact, no scroll */}
+          <div className="relative bg-gradient-to-br from-emerald-50 via-white to-blue-50 p-6 text-center">
+            {/* Trophy Icon */}
+            <div className="mb-3 inline-flex h-14 w-14 animate-bounce items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 shadow-lg">
+              <Trophy className="h-7 w-7 text-white" />
             </div>
 
-            <div className="mb-6 rounded-xl border-2 border-emerald-200 bg-white p-6 shadow-xl">
-              <div className="space-y-4">
-                <div className="border-b border-gray-200 pb-4 text-center">
-                  <div className="mb-2 flex items-center justify-center gap-2">
-                    <DollarSign className="h-8 w-8 text-emerald-600" />
-                    <span className="text-5xl font-bold text-emerald-900">
-                      ${saleAmount.toFixed(2)}
-                    </span>
-                  </div>
-                  <p className="text-sm font-semibold text-emerald-700">Recovered Revenue</p>
-                </div>
+            {/* Title */}
+            <h2 className="mb-1 text-xl font-bold text-gray-900">
+              🎉 First Sale Recovered!
+            </h2>
+            <p className="mb-4 text-sm text-gray-600">
+              Your AI agent just recovered its first sale.
+            </p>
 
-                <div className="grid grid-cols-1 gap-3">
-                  <div className="flex items-center gap-3 rounded-lg bg-gray-50 p-3">
-                    <User className="h-5 w-5 text-blue-600" />
-                    <div>
-                      <p className="text-xs text-gray-600">Customer</p>
-                      <p className="font-semibold text-gray-900">{customerName}</p>
-                    </div>
-                  </div>
+            {/* Amount - Big & Bold */}
+            <div className="mb-4">
+              <div className="flex items-center justify-center gap-1">
+                <DollarSign className="h-6 w-6 text-emerald-600" />
+                <span className="text-5xl font-bold text-emerald-900">
+                  {displayAmount.toFixed(2)}
+                </span>
+              </div>
+              <p className="text-xs font-medium text-emerald-700 mt-1">Recovered Revenue</p>
+            </div>
 
-                  <div className="flex items-center gap-3 rounded-lg bg-gray-50 p-3">
-                    <Clock className="h-5 w-5 text-purple-600" />
-                    <div>
-                      <p className="text-xs text-gray-600">Recovery Time</p>
-                      <p className="font-semibold text-gray-900">{recoveryTime}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3 rounded-lg bg-gray-50 p-3">
-                    <div className="flex h-5 w-5 items-center justify-center">
-                      <Target className="h-5 w-5 text-emerald-600" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-600">Campaign</p>
-                      <p className="font-semibold text-gray-900">{campaign}</p>
-                    </div>
-                  </div>
-                </div>
+            {/* Key Details - Horizontal Layout */}
+            <div className="mb-5 flex items-center justify-center gap-6 text-sm">
+              <div className="flex items-center gap-1.5">
+                <User className="h-4 w-4 text-blue-600" />
+                <span className="text-gray-900">{customerName}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Clock className="h-4 w-4 text-purple-600" />
+                <span className="text-gray-900">{recoveryTime}</span>
               </div>
             </div>
 
-            <div className="mb-6 rounded-lg border border-purple-200 bg-gradient-to-r from-purple-50 to-pink-50 p-4 text-center">
-              <p className="text-sm text-gray-700">
-                This is just the beginning! Your AI Revenue Agent is working 24/7 
-                to recover more sales automatically.
-              </p>
-            </div>
-
+            {/* Action Buttons */}
             <div className="flex gap-3">
               <button
-                onClick={handleShare}
-                className="flex-1 gap-2 rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-900 transition-colors hover:bg-gray-100 hover:text-gray-900"
+                onClick={onClose}
+                className="flex-1 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-emerald-700 flex items-center justify-center gap-1.5"
               >
-                <Share2 className="h-4 w-4" />
-                Share Your Win
+                View in Decision Log
+                <ArrowRight className="h-4 w-4" />
               </button>
               <button
                 onClick={onClose}
-                className="flex-1 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700"
+                className="flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
               >
-                View Dashboard
+                Continue
               </button>
             </div>
           </div>

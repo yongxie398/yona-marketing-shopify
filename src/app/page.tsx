@@ -916,6 +916,13 @@ export default function DashboardPage() {
     // Check for first sale celebration
     if (shop) {
       checkFirstSale(shop);
+      
+      // Set up polling to check for first sale in real-time (every 5 seconds)
+      const interval = setInterval(() => {
+        checkFirstSale(shop);
+      }, 5000);
+      
+      return () => clearInterval(interval);
     }
   }, []);
 

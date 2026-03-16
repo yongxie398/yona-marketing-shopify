@@ -1,7 +1,7 @@
 'use client';
 
 import { Grid3x3, MoreVertical, Settings, CreditCard } from "lucide-react";
-import { Button } from "./ui/button";
+import { Button } from "@/components/ui/button";
 
 interface DashboardHeaderProps {
   shopDomain?: string | null;

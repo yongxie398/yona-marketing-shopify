@@ -22,7 +22,7 @@ import {
   Lightbulb,
   BarChart3
 } from "lucide-react";
-import { ScrollArea } from "./ui/scroll-area";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import logger from '@/utils/logger';
 
 interface ActivityFeedProps {

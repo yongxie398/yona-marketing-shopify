@@ -1,7 +1,7 @@
 'use client';
 
-import { Card } from './ui/card';
-import { Badge } from './ui/badge';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { 
   ArrowLeft, 
   TrendingUp, 

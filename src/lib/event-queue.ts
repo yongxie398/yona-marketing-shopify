@@ -34,7 +34,16 @@ class EventQueue {
 
   private initializeRedis(): void {
     try {
-      const { createClient } = require('redis');
+      // Dynamic import to avoid build-time dependency issues
+      let createClient: any;
+      try {
+        const redis = require('redis');
+        createClient = redis.createClient;
+      } catch (e) {
+        logger.warn('Redis module not available, using in-memory queue only', { context: 'EventQueue' });
+        this.redisAvailable = false;
+        return;
+      }
       
       const redisHost = process.env.REDIS_CLOUD_HOST;
       const redisPort = parseInt(process.env.REDIS_CLOUD_PORT || '6379');

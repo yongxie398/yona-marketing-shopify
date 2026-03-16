@@ -1,7 +1,7 @@
 'use client';
 
-import { Badge } from "./ui/badge";
-import { Card } from "./ui/card";
+import { Badge } from "./ui/Badge";
+import { Card } from "./ui/Card";
 import { DollarSign, TrendingUp, Zap, Clock } from "lucide-react";
 
 interface StatusCardProps {

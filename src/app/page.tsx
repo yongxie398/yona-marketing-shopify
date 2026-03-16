@@ -2,7 +2,8 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   Grid3x3, 
   MoreVertical, 
@@ -39,21 +40,13 @@ import { ExperimentResults } from '@/components/ExperimentResults';
 import FirstSaleCelebration from '@/components/FirstSaleCelebration';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { MetricsGrid as MetricsGridComponent } from '@/components/MetricsGrid';
+import { ActivityFeed as ActivityFeedComponent } from '@/components/ActivityFeed';
+import { formatCompactCurrency, formatCompactNumber, formatRevenuePerRecipient, formatPercentage, convertUTCToLocalTime, getLocalDayName } from '@/utils/formatters';
 
 // Types
 export type TimeRange = 'today' | '7days' | '30days';
 type AIStatus = 'active' | 'paused';
-
-interface Metrics {
-  revenue: number;
-  revenueChange: number;
-  roi: number;
-  roiChange: number;
-  revenuePerRecipient: number;
-  revenuePerRecipientChange: number;
-  conversionRate: number;
-  conversionRateChange: number;
-}
 
 // Utility function for class names
 function cn(...classes: (string | undefined | null | false)[]) {
@@ -61,39 +54,6 @@ function cn(...classes: (string | undefined | null | false)[]) {
 }
 
 // Default metrics data
-const defaultMetrics: Record<TimeRange, Metrics> = {
-  today: {
-    revenue: 0,
-    revenueChange: 0,
-    roi: 0,
-    roiChange: 0,
-    revenuePerRecipient: 0,
-    revenuePerRecipientChange: 0,
-    conversionRate: 0,
-    conversionRateChange: 0,
-  },
-  '7days': {
-    revenue: 11419,
-    revenueChange: 23,
-    roi: 4.2,
-    roiChange: 15,
-    revenuePerRecipient: 34.71,
-    revenuePerRecipientChange: 18,
-    conversionRate: 24.4,
-    conversionRateChange: 12,
-  },
-  '30days': {
-    revenue: 42847,
-    revenueChange: 35,
-    roi: 5.8,
-    roiChange: 28,
-    revenuePerRecipient: 42.18,
-    revenuePerRecipientChange: 32,
-    conversionRate: 27.8,
-    conversionRateChange: 21,
-  },
-};
-
 // Button Component
 function Button({
   className,
@@ -284,7 +244,100 @@ function DashboardHeader({ shopDomain }: { shopDomain?: string | null }) {
 }
 
 // Status Card Component
-function StatusCard({ aiStatus }: { aiStatus: AIStatus }) {
+function StatusCard({ aiStatus, storeId, shopDomain }: { aiStatus: AIStatus; storeId?: string; shopDomain?: string | null }) {
+  const [metrics, setMetrics] = useState({
+    revenue: 0,
+    activeInterventions: 0,
+    timeToFirstSale: '--'
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchStatusMetrics() {
+      if (!storeId) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        // Fetch revenue metrics
+        const revenueResponse = await fetch(
+          `/api/analytics/revenue/${storeId}?timeRange=today`,
+          { headers: { 'Content-Type': 'application/json' } }
+        );
+
+        let revenue = 0;
+        if (revenueResponse.ok) {
+          const revenueData = await revenueResponse.json();
+          revenue = revenueData.attributed_revenue || 0;
+        }
+
+        // Fetch campaign performance for active interventions
+        const campaignResponse = await fetch(
+          `/api/analytics/campaign-performance/${storeId}?timeRange=today`,
+          { headers: { 'Content-Type': 'application/json' } }
+        );
+
+        let activeInterventions = 0;
+        if (campaignResponse.ok) {
+          const campaignData = await campaignResponse.json();
+          // Sum up emails sent today across all campaign types
+          if (Array.isArray(campaignData)) {
+            activeInterventions = campaignData.reduce((sum: number, campaign: any) => {
+              return sum + (campaign.emails_sent || 0);
+            }, 0);
+          }
+        }
+
+        // Fetch first sale info
+        let timeToFirstSale = '--';
+        if (shopDomain) {
+          try {
+            const firstSaleResponse = await fetch(
+              `/api/first-sale?shop=${encodeURIComponent(shopDomain)}`,
+              { headers: { 'Content-Type': 'application/json' } }
+            );
+            if (firstSaleResponse.ok) {
+              const firstSaleData = await firstSaleResponse.json();
+              if (firstSaleData.isFirstSale) {
+                timeToFirstSale = 'Pending';
+              } else if (firstSaleData.timeToFirstSale) {
+                // Use the calculated time to first sale from backend
+                timeToFirstSale = firstSaleData.timeToFirstSale;
+              } else if (firstSaleData.recoveredAt) {
+                timeToFirstSale = 'Achieved';
+              } else {
+                timeToFirstSale = 'In Progress';
+              }
+            }
+          } catch (e) {
+            // Ignore first sale fetch errors
+          }
+        }
+
+        setMetrics({
+          revenue,
+          activeInterventions,
+          timeToFirstSale
+        });
+      } catch (error) {
+        console.error('Error fetching status metrics:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchStatusMetrics();
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchStatusMetrics, 30000);
+    return () => clearInterval(interval);
+  }, [storeId]);
+
+  const formatRevenue = (value: number) => {
+    return formatCompactCurrency(value);
+  };
+
   return (
     <Card className="p-6 bg-gradient-to-br from-emerald-50 to-green-50" style={{ borderColor: '#a7f3d0' }}>
       <div className="flex items-start justify-between mb-6">
@@ -318,7 +371,9 @@ function StatusCard({ aiStatus }: { aiStatus: AIStatus }) {
             <DollarSign className="w-5 h-5 text-emerald-600" />
             <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Revenue Recovered</span>
           </div>
-          <div className="text-3xl font-bold text-gray-900 mb-1">$0</div>
+          <div className="text-3xl font-bold text-gray-900 mb-1 tabular-nums">
+            {loading ? '-' : formatRevenue(metrics.revenue)}
+          </div>
           <p className="text-xs text-gray-500">Today</p>
         </div>
 
@@ -327,7 +382,9 @@ function StatusCard({ aiStatus }: { aiStatus: AIStatus }) {
             <TrendingUp className="w-5 h-5 text-blue-600" />
             <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Active Interventions</span>
           </div>
-          <div className="text-3xl font-bold text-gray-900 mb-1">0</div>
+          <div className="text-3xl font-bold text-gray-900 mb-1 tabular-nums">
+            {loading ? '-' : formatCompactNumber(metrics.activeInterventions)}
+          </div>
           <p className="text-xs text-gray-500">
             {aiStatus === 'active' ? 'Monitoring shoppers' : 'Paused'}
           </p>
@@ -338,8 +395,29 @@ function StatusCard({ aiStatus }: { aiStatus: AIStatus }) {
             <Clock className="w-5 h-5 text-purple-600" />
             <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Time to First Sale</span>
           </div>
-          <div className="text-3xl font-bold text-gray-900 mb-1">--</div>
-          <p className="text-xs text-gray-500">After install</p>
+          <div className="text-3xl font-bold text-gray-900 mb-1" title={metrics.timeToFirstSale === 'In Progress' ? 'AI is actively working toward your first sale. Typically 3-7 days.' : ''}>
+            {metrics.timeToFirstSale === 'In Progress' ? (
+              <span className="flex items-center gap-2">
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-purple-500"></span>
+                </span>
+                <span className="text-lg text-purple-600">Active</span>
+              </span>
+            ) : metrics.timeToFirstSale === 'Pending' ? (
+              <span className="text-2xl text-gray-500">--</span>
+            ) : metrics.timeToFirstSale === 'Achieved' ? (
+              <span className="text-2xl text-emerald-600">✓</span>
+            ) : (
+              <span className="tabular-nums">{metrics.timeToFirstSale}</span>
+            )}
+          </div>
+          <p className="text-xs text-gray-500">
+            {metrics.timeToFirstSale === 'In Progress' ? 'Working toward first sale' : 
+             metrics.timeToFirstSale === 'Pending' ? 'Waiting for first event' : 
+             metrics.timeToFirstSale === 'Achieved' ? 'First sale recovered!' : 
+             'First sale achieved'}
+          </p>
         </div>
       </div>
     </Card>
@@ -347,123 +425,50 @@ function StatusCard({ aiStatus }: { aiStatus: AIStatus }) {
 }
 
 // Metric Card Component
-function MetricCard({ title, value, change, subtitle, icon, prefix, highlight }: {
-  title: string;
-  value: string;
-  change: number;
-  subtitle: string;
-  icon: React.ReactNode;
-  prefix?: string;
-  highlight?: boolean;
-}) {
-  const isPositive = change >= 0;
-  
-  return (
-    <Card highlight={highlight} className="p-6 hover:shadow-lg transition-shadow">
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className={cn('p-2 rounded-lg', highlight ? 'bg-emerald-50' : 'bg-blue-50')}>
-            {icon}
-          </div>
-          <span className="text-sm font-medium text-gray-600">{title}</span>
-        </div>
-        <div className={cn('flex items-center gap-1 text-xs font-medium', isPositive ? 'text-green-600' : 'text-red-600')}>
-          {isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-          {Math.abs(change)}%
-        </div>
-      </div>
-      
-      <div className="mb-2">
-        <div className="text-3xl font-bold text-gray-900">
-          {prefix}{value}
-        </div>
-      </div>
-      
-      <p className="text-sm text-gray-500">{subtitle}</p>
-    </Card>
-  );
-}
-
-// Metrics Grid Component - 4 cards per row
-function MetricsGrid({ timeRange }: { timeRange: TimeRange }) {
-  const metrics = defaultMetrics[timeRange];
-
-  return (
-    <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-      <MetricCard
-        title="Incremental Revenue"
-        value={metrics.revenue.toLocaleString()}
-        change={metrics.revenueChange}
-        subtitle="AI-attributed recovery only"
-        icon={<DollarSign className="w-5 h-5 text-emerald-600" />}
-        prefix="$"
-        highlight={true}
-      />
-      
-      <MetricCard
-        title="Return on Investment"
-        value={`${metrics.roi}x`}
-        change={metrics.roiChange}
-        subtitle="Revenue generated per $1 spent"
-        icon={<Target className="w-5 h-5 text-blue-600" />}
-        prefix=""
-      />
-      
-      <MetricCard
-        title="Revenue per Recipient"
-        value={metrics.revenuePerRecipient.toFixed(2)}
-        change={metrics.revenuePerRecipientChange}
-        subtitle="Avg revenue per email sent"
-        icon={<Users className="w-5 h-5 text-blue-600" />}
-        prefix="$"
-      />
-      
-      <MetricCard
-        title="Conversion Rate"
-        value={`${metrics.conversionRate}%`}
-        change={metrics.conversionRateChange}
-        subtitle="Recipients who purchased"
-        icon={<TrendingUp className="w-5 h-5 text-blue-600" />}
-        prefix=""
-      />
-    </div>
-  );
-}
-
 // Performance Chart Component
-function PerformanceChart({ timeRange }: { timeRange: TimeRange }) {
-  const getData = () => {
-    switch (timeRange) {
-      case 'today':
-        return [
-          { time: '12am', revenue: 0, emails: 0 },
-          { time: '4am', revenue: 0, emails: 0 },
-          { time: '8am', revenue: 0, emails: 2 },
-          { time: '12pm', revenue: 0, emails: 5 },
-          { time: '4pm', revenue: 0, emails: 8 },
-          { time: '8pm', revenue: 0, emails: 12 },
-        ];
-      case '7days':
-        return [
-          { time: 'Mon', revenue: 28, emails: 42 },
-          { time: 'Tue', revenue: 45, emails: 51 },
-          { time: 'Wed', revenue: 52, emails: 48 },
-          { time: 'Thu', revenue: 38, emails: 45 },
-          { time: 'Fri', revenue: 61, emails: 67 },
-          { time: 'Sat', revenue: 72, emails: 58 },
-          { time: 'Sun', revenue: 51, emails: 48 },
-        ];
-      case '30days':
-        return [
-          { time: 'Week 1', revenue: 182, emails: 248 },
-          { time: 'Week 2', revenue: 295, emails: 312 },
-          { time: 'Week 3', revenue: 387, emails: 358 },
-          { time: 'Week 4', revenue: 428, emails: 329 },
-        ];
-    }
-  };
+function PerformanceChart({ timeRange, storeId }: { timeRange: TimeRange; storeId?: string }) {
+  const [data, setData] = useState<Array<{ time: string; revenue: number; emails: number }>>([]);
+  const [loading, setLoading] = useState(true);
 
-  const data = getData();
+  useEffect(() => {
+    async function fetchChartData() {
+      if (!storeId) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        const response = await fetch(
+          `/api/analytics/performance-chart/${storeId}?timeRange=${timeRange}`
+        );
+
+        if (response.ok) {
+          const chartData = await response.json();
+          // Convert time format based on timeRange
+          const localData = chartData.map((item: { time: string; revenue: number; emails: number }) => ({
+            ...item,
+            time: timeRange === 'today' 
+              ? convertUTCToLocalTime(item.time)  // HH:MM format
+              : timeRange === '7days'
+                ? getLocalDayName(item.time)  // Convert ISO date to local day name
+                : item.time  // '30days' - Week labels, no conversion needed
+          }));
+          setData(localData);
+        } else {
+          // Fallback to empty data on error
+          setData([]);
+        }
+      } catch (error) {
+        console.error('Error fetching chart data:', error);
+        setData([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchChartData();
+  }, [storeId, timeRange]);
 
   return (
     <Card className="p-6">
@@ -472,6 +477,27 @@ function PerformanceChart({ timeRange }: { timeRange: TimeRange }) {
         <p className="text-sm text-gray-500 mt-1">Revenue and email engagement trends</p>
       </div>
       
+      {loading ? (
+        <div className="h-[300px] flex items-center justify-center">
+          <div className="animate-pulse flex space-x-4">
+            <div className="flex-1 space-y-4 py-1">
+              <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+              <div className="space-y-2">
+                <div className="h-4 bg-gray-200 rounded"></div>
+                <div className="h-4 bg-gray-200 rounded w-5/6"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : data.length === 0 ? (
+        <div className="h-[300px] flex items-center justify-center text-gray-500">
+          <div className="text-center">
+            <Activity className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+            <p>No data available yet</p>
+            <p className="text-sm text-gray-400">Activity will appear here when customers engage</p>
+          </div>
+        </div>
+      ) : (
       <ResponsiveContainer width="100%" height={300}>
         <AreaChart data={data}>
           <defs>
@@ -491,7 +517,15 @@ function PerformanceChart({ timeRange }: { timeRange: TimeRange }) {
             style={{ fontSize: '12px' }}
           />
           <YAxis 
-            stroke="#6b7280"
+            yAxisId="left"
+            stroke="#3b82f6"
+            style={{ fontSize: '12px' }}
+            tickFormatter={(value) => `$${value}`}
+          />
+          <YAxis 
+            yAxisId="right"
+            orientation="right"
+            stroke="#8b5cf6"
             style={{ fontSize: '12px' }}
           />
           <Tooltip 
@@ -501,9 +535,16 @@ function PerformanceChart({ timeRange }: { timeRange: TimeRange }) {
               borderRadius: '8px',
               boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
             }}
+            formatter={(value: number, name: string) => {
+              if (name === 'Revenue ($)') {
+                return [`$${value}`, name];
+              }
+              return [value, name];
+            }}
           />
           <Legend />
           <Area 
+            yAxisId="left"
             type="monotone" 
             dataKey="revenue" 
             stroke="#3b82f6" 
@@ -513,6 +554,7 @@ function PerformanceChart({ timeRange }: { timeRange: TimeRange }) {
             name="Revenue ($)"
           />
           <Area 
+            yAxisId="right"
             type="monotone" 
             dataKey="emails" 
             stroke="#8b5cf6" 
@@ -523,179 +565,53 @@ function PerformanceChart({ timeRange }: { timeRange: TimeRange }) {
           />
         </AreaChart>
       </ResponsiveContainer>
-    </Card>
-  );
-}
-
-// Activity Feed Component
-function ActivityFeed({ aiStatus }: { aiStatus: AIStatus }) {
-  const activities = [
-    {
-      id: '1',
-      type: 'conversion' as const,
-      action: 'Revenue recovered',
-      reasoning: 'Sarah M. completed purchase after cart abandonment email',
-      time: '8 minutes ago',
-      revenue: 127.50,
-      customer: 'Sarah M.',
-      campaign: 'Cart Abandonment'
-    },
-    {
-      id: '2',
-      type: 'decision' as const,
-      action: 'Sent cart abandonment email',
-      reasoning: 'Michael added $215 to cart, viewed 3x in 2 days, no frequency cap hit',
-      time: '15 minutes ago',
-      customer: 'Michael C.',
-      campaign: 'Cart Abandonment'
-    },
-    {
-      id: '3',
-      type: 'learning' as const,
-      action: 'AI optimized send timing',
-      reasoning: 'Friday 6-9PM shows 3.2x higher conversion → adjusted timing window',
-      time: '32 minutes ago',
-    },
-    {
-      id: '4',
-      type: 'decision' as const,
-      action: 'Sent browse abandonment email',
-      reasoning: 'Emma viewed product 4x, high-intent behavior detected, 4hr delay optimal',
-      time: '1 hour ago',
-      customer: 'Emma W.',
-      campaign: 'Browse Abandonment'
-    },
-    {
-      id: '5',
-      type: 'conversion' as const,
-      action: 'Revenue recovered',
-      reasoning: 'James T. completed checkout after abandonment intervention',
-      time: '2 hours ago',
-      revenue: 89.99,
-      customer: 'James T.',
-      campaign: 'Checkout Abandonment'
-    },
-    {
-      id: '6',
-      type: 'decision' as const,
-      action: 'Paused messaging to customer',
-      reasoning: 'Lisa hit frequency cap (3 messages in 7 days) → waiting 48h',
-      time: '3 hours ago',
-      customer: 'Lisa P.',
-    },
-    {
-      id: '7',
-      type: 'learning' as const,
-      action: 'AI improved subject lines',
-      reasoning: 'Personalized subjects show +67% open rate → now default',
-      time: '4 hours ago',
-    },
-    {
-      id: '8',
-      type: 'decision' as const,
-      action: 'Sent post-purchase follow-up',
-      reasoning: 'David completed order → building trust with immediate thank you',
-      time: '5 hours ago',
-      customer: 'David K.',
-      campaign: 'Post-Purchase'
-    },
-  ];
-
-  const getActivityIcon = (type: string) => {
-    switch (type) {
-      case 'decision':
-        return <Target className="w-4 h-4" />;
-      case 'conversion':
-        return <TrendingUp className="w-4 h-4" />;
-      case 'learning':
-        return <Brain className="w-4 h-4" />;
-      default:
-        return <Activity className="w-4 h-4" />;
-    }
-  };
-
-  const getActivityColor = (type: string) => {
-    switch (type) {
-      case 'decision':
-        return 'bg-blue-100 text-blue-700';
-      case 'conversion':
-        return 'bg-green-100 text-green-700';
-      case 'learning':
-        return 'bg-purple-100 text-purple-700';
-      default:
-        return 'bg-gray-100 text-gray-700';
-    }
-  };
-
-  return (
-    <Card className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900">AI Decision Log</h3>
-          <p className="text-sm text-gray-500 mt-1">Every action explained in plain language</p>
-        </div>
-        <Badge variant="outline" className="gap-1">
-          <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-          Live
-        </Badge>
-      </div>
-
-      {aiStatus === 'paused' ? (
-        <div className="text-center py-12">
-          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Clock className="w-8 h-8 text-gray-400" />
-          </div>
-          <h4 className="text-lg font-medium text-gray-900 mb-2">AI Agent Paused</h4>
-          <p className="text-sm text-gray-500">Resume to see autonomous revenue recovery in action</p>
-        </div>
-      ) : (
-        <ScrollArea className="h-[500px] pr-4">
-          <div className="space-y-4">
-            {activities.map((activity) => (
-              <div key={activity.id} className="pb-4 border-b border-gray-100 last:border-0">
-                <div className="flex gap-3">
-                  <div className={cn('p-2 rounded-lg h-fit', getActivityColor(activity.type))}>
-                    {getActivityIcon(activity.type)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <div>
-                        <h4 className="font-semibold text-gray-900 text-sm">{activity.action}</h4>
-                        {activity.campaign && (
-                          <Badge variant="outline" className="mt-1 text-xs">
-                            {activity.campaign}
-                          </Badge>
-                        )}
-                      </div>
-                      <span className="text-xs text-gray-500 whitespace-nowrap">{activity.time}</span>
-                    </div>
-                    <p className="text-sm text-gray-600 leading-relaxed mt-1">
-                      <span className="font-medium">Why:</span> {activity.reasoning}
-                    </p>
-                    {activity.revenue && (
-                      <div className="mt-2 inline-flex items-center gap-1 px-2 py-1 bg-green-50 border border-green-200 rounded text-xs font-semibold text-green-700">
-                        <TrendingUp className="w-3 h-3" />
-                        +${activity.revenue.toFixed(2)} recovered
-                      </div>
-                    )}
-                    {activity.customer && !activity.revenue && (
-                      <div className="mt-2 text-xs text-gray-500">
-                        Customer: {activity.customer}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </ScrollArea>
       )}
     </Card>
   );
 }
 
 // AI Controls Component
-function AIControls({ aiStatus, setAiStatus }: { aiStatus: AIStatus; setAiStatus: (status: AIStatus) => void }) {
+function AIControls({ aiStatus, setAiStatus, storeId, timeRange }: { aiStatus: AIStatus; setAiStatus: (status: AIStatus) => void; storeId?: string; timeRange: TimeRange }) {
+  const [performance, setPerformance] = useState({
+    decision_speed_seconds: 0,
+    learning_rate_percent: 0,
+    total_decisions: 0,
+    loading: true
+  });
+
+  useEffect(() => {
+    async function fetchPerformance() {
+      if (!storeId) {
+        setPerformance(prev => ({ ...prev, loading: false }));
+        return;
+      }
+
+      try {
+        setPerformance(prev => ({ ...prev, loading: true }));
+        const response = await fetch(
+          `/api/ai/agent-performance/${storeId}?timeRange=${timeRange}`
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          setPerformance({
+            decision_speed_seconds: data.decision_speed_seconds || 0,
+            learning_rate_percent: data.learning_rate_percent || 0,
+            total_decisions: data.total_decisions || 0,
+            loading: false
+          });
+        } else {
+          setPerformance(prev => ({ ...prev, loading: false }));
+        }
+      } catch (error) {
+        console.error('Error fetching agent performance:', error);
+        setPerformance(prev => ({ ...prev, loading: false }));
+      }
+    }
+
+    fetchPerformance();
+  }, [storeId, timeRange]);
+
   return (
     <Card className="p-6">
       <div className="mb-6">
@@ -759,15 +675,32 @@ function AIControls({ aiStatus, setAiStatus }: { aiStatus: AIStatus; setAiStatus
           <div className="grid grid-cols-2 gap-3">
             <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
               <div className="text-xs text-emerald-700 font-medium">Decision Speed</div>
-              <div className="text-xl font-bold text-emerald-900 mt-1">1.2s</div>
+              <div className="text-xl font-bold text-emerald-900 mt-1">
+                {performance.loading ? (
+                  <span className="animate-pulse">...</span>
+                ) : (
+                  `${performance.decision_speed_seconds.toFixed(1)}s`
+                )}
+              </div>
               <div className="text-xs text-emerald-600 mt-1">Avg response time</div>
             </div>
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <div className="text-xs text-blue-700 font-medium">Learning Rate</div>
-              <div className="text-xl font-bold text-blue-900 mt-1">+18%</div>
+              <div className="text-xl font-bold text-blue-900 mt-1">
+                {performance.loading ? (
+                  <span className="animate-pulse">...</span>
+                ) : (
+                  `${performance.learning_rate_percent >= 0 ? '+' : ''}${performance.learning_rate_percent.toFixed(1)}%`
+                )}
+              </div>
               <div className="text-xs text-blue-600 mt-1">Improvement/week</div>
             </div>
           </div>
+          {!performance.loading && performance.total_decisions > 0 && (
+            <p className="text-xs text-gray-500 text-center">
+              Based on {performance.total_decisions} decisions
+            </p>
+          )}
         </div>
 
         <div className="pt-4 border-t border-gray-200">
@@ -784,46 +717,74 @@ function AIControls({ aiStatus, setAiStatus }: { aiStatus: AIStatus; setAiStatus
 }
 
 // Insights Panel Component
-function InsightsPanel({ timeRange }: { timeRange: TimeRange }) {
-  const getInsights = () => {
-    const baseInsights = [
-      {
-        id: '1',
-        type: 'learning' as const,
-        icon: <Brain className="w-4 h-4" />,
-        title: 'AI Learning Active',
-        description: 'Agent is continuously improving send timing based on your customers\' behavior patterns. Current optimization: Friday 6-9PM window.',
-      },
-      {
-        id: '2',
-        type: 'success' as const,
-        icon: <TrendingUp className="w-4 h-4" />,
-        title: 'Personalization Working',
-        description: 'Emails with customer names show 67% higher open rates. AI has applied this to all campaigns automatically.',
-      },
-      {
-        id: '3',
-        type: 'info' as const,
-        icon: <Activity className="w-4 h-4" />,
-        title: 'Optimal Timing Detected',
-        description: 'Cart abandonment emails sent within 2 hours show 2.3x higher conversion than 24hr delays. AI adjusted timing.',
-      },
-    ];
+function InsightsPanel({ timeRange, storeId }: { timeRange: TimeRange; storeId?: string }) {
+  const [insights, setInsights] = useState<Array<{ id: string; type: string; title: string; description: string }>>([]);
+  const [loading, setLoading] = useState(true);
 
-    if (timeRange === '30days') {
-      return [
-        {
-          id: '4',
-          type: 'success' as const,
-          icon: <Target className="w-4 h-4" />,
-          title: 'Strong Monthly Performance',
-          description: 'Revenue recovery increased 35% this month. AI autonomy is delivering consistent results without manual intervention.',
-        },
-        ...baseInsights,
-      ];
+  useEffect(() => {
+    async function fetchInsights() {
+      if (!storeId) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        const response = await fetch(
+          `/api/ai/insights/${storeId}?timeRange=${timeRange}`
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          setInsights(data);
+        } else {
+          // Fallback to default insights on error
+          setInsights([
+            {
+              id: '1',
+              type: 'learning',
+              title: 'AI Learning Active',
+              description: 'Agent is continuously improving send timing based on your customers\' behavior patterns.'
+            },
+            {
+              id: '2',
+              type: 'info',
+              title: 'Optimal Timing Detected',
+              description: 'AI analyzes customer engagement patterns to determine the best time to send messages.'
+            }
+          ]);
+        }
+      } catch (error) {
+        console.error('Error fetching insights:', error);
+        setInsights([
+          {
+            id: '1',
+            type: 'learning',
+            title: 'AI Learning Active',
+            description: 'Agent is continuously improving send timing based on your customers\' behavior patterns.'
+          }
+        ]);
+      } finally {
+        setLoading(false);
+      }
     }
 
-    return baseInsights;
+    fetchInsights();
+  }, [storeId, timeRange]);
+
+  const getInsightIcon = (type: string) => {
+    switch (type) {
+      case 'success':
+        return <TrendingUp className="w-4 h-4" />;
+      case 'warning':
+        return <AlertCircle className="w-4 h-4" />;
+      case 'info':
+        return <Activity className="w-4 h-4" />;
+      case 'learning':
+        return <Brain className="w-4 h-4" />;
+      default:
+        return <Activity className="w-4 h-4" />;
+    }
   };
 
   const getInsightColor = (type: string) => {
@@ -841,8 +802,6 @@ function InsightsPanel({ timeRange }: { timeRange: TimeRange }) {
     }
   };
 
-  const insights = getInsights();
-
   return (
     <Card className="p-6">
       <div className="flex items-center gap-2 mb-6">
@@ -850,6 +809,21 @@ function InsightsPanel({ timeRange }: { timeRange: TimeRange }) {
         <h3 className="text-lg font-semibold text-gray-900">AI Insights</h3>
       </div>
 
+      {loading ? (
+        <div className="space-y-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="p-4 rounded-lg border border-gray-100 bg-gray-50 animate-pulse">
+              <div className="flex items-start gap-3">
+                <div className="w-4 h-4 bg-gray-200 rounded" />
+                <div className="flex-1">
+                  <div className="h-4 bg-gray-200 rounded w-1/2 mb-2" />
+                  <div className="h-3 bg-gray-200 rounded w-3/4" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
       <div className="space-y-4">
         {insights.map((insight) => (
           <div
@@ -857,7 +831,7 @@ function InsightsPanel({ timeRange }: { timeRange: TimeRange }) {
             className={cn('p-4 rounded-lg border', getInsightColor(insight.type))}
           >
             <div className="flex items-start gap-3">
-              <div className="mt-0.5">{insight.icon}</div>
+              <div className="mt-0.5">{getInsightIcon(insight.type)}</div>
               <div className="flex-1 min-w-0">
                 <h4 className="font-semibold text-sm mb-1">{insight.title}</h4>
                 <p className="text-xs opacity-90 leading-relaxed">{insight.description}</p>
@@ -866,6 +840,7 @@ function InsightsPanel({ timeRange }: { timeRange: TimeRange }) {
           </div>
         ))}
       </div>
+      )}
 
       <div className="mt-6 pt-6 border-t border-gray-200">
         <h4 className="text-sm font-semibold text-gray-900 mb-3">What AI Does Autonomously</h4>
@@ -894,12 +869,15 @@ function InsightsPanel({ timeRange }: { timeRange: TimeRange }) {
 
 // Main Dashboard Page
 export default function DashboardPage() {
+  const router = useRouter();
   const [timeRange, setTimeRange] = useState<TimeRange>('7days');
   const [aiStatus, setAiStatus] = useState<AIStatus>('active');
   const [activeTab, setActiveTab] = useState<'overview' | 'campaigns' | 'abtesting'>('overview');
   const [shopDomain, setShopDomain] = useState<string | null>(null);
+  const [storeId, setStoreId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showFirstSale, setShowFirstSale] = useState(false);
+  const hasShownCelebration = useRef(false);
   const [firstSaleData, setFirstSaleData] = useState({
     saleAmount: 0,
     customerName: 'Customer',
@@ -910,8 +888,37 @@ export default function DashboardPage() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const shop = urlParams.get('shop');
+    const billing = urlParams.get('billing');
+    const billingMessage = urlParams.get('message');
+    const host = urlParams.get('host');
+    const onboardingStep = urlParams.get('onboarding');
+    
+    // Debug logging for billing callback
+    console.log('[Billing Debug] URL params:', {
+      shop,
+      billing,
+      billingMessage,
+      host,
+      onboardingStep,
+      fullUrl: window.location.href,
+      search: window.location.search
+    });
+    
     setShopDomain(shop);
     setLoading(false);
+
+    // Note: Billing callback redirect is now handled by auth callback using onboarding_step
+    // The auth callback checks the store's onboarding_step and redirects accordingly
+    // This ensures proper flow even when URL parameters are not preserved
+
+    // Check if celebration was already shown in this session
+    const sessionKey = shop ? `celebration-shown-${shop}` : null;
+    if (sessionKey && sessionStorage.getItem(sessionKey)) {
+      console.log('Celebration already shown in this session, skipping...');
+      hasShownCelebration.current = true;
+    } else {
+      console.log('Celebration not shown yet in this session');
+    }
 
     // Check for first sale celebration
     if (shop) {
@@ -926,7 +933,65 @@ export default function DashboardPage() {
     }
   }, []);
 
+  // Fetch store info and check onboarding status when shopDomain is available
+  useEffect(() => {
+    async function fetchStoreInfo() {
+      if (!shopDomain) return;
+      
+      try {
+        const response = await fetch(`/api/store-info?shop=${encodeURIComponent(shopDomain)}`);
+        if (response.ok) {
+          const data = await response.json();
+          setStoreId(data.storeId);
+          
+          // Check onboarding status and redirect if needed
+          console.log('[Onboarding Debug] Store info:', {
+            onboardingComplete: data.onboardingComplete,
+            brandTone: data.brandTone,
+            shop: shopDomain
+          });
+          
+          // If onboarding is not complete and we're on the dashboard, redirect to onboarding
+          if (!data.onboardingComplete) {
+            const urlParams = new URLSearchParams(window.location.search);
+            const currentPath = window.location.pathname;
+            const host = urlParams.get('host') || '';
+            
+            console.log('[Onboarding Debug] Onboarding incomplete, current path:', currentPath);
+            
+            // Only redirect if we're on the main dashboard page (not already in onboarding)
+            if (currentPath === '/' || currentPath === '') {
+              // Check if brand voice is set (indicates brand voice page is done)
+              if (data.brandTone && data.brandTone !== 'friendly') {
+                // Brand voice is set, go to AI Live onboarding
+                console.log('[Onboarding Debug] Redirecting to AI Live onboarding');
+                window.location.href = `/onboarding/ai-live?shop=${encodeURIComponent(shopDomain)}&host=${encodeURIComponent(host)}`;
+              }
+              // Note: We don't auto-redirect to plan-selection or brand-voice here
+              // because we can't distinguish between:
+              // 1. New store that needs plan selection
+              // 2. Store that just completed billing and needs brand voice
+              // The auth callback handles the initial redirect to plan-selection
+              // and the billing callback URL parameters should handle the brand-voice redirect
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching store info:', error);
+      }
+    }
+    
+    fetchStoreInfo();
+  }, [shopDomain]);
+
   const checkFirstSale = async (shop: string) => {
+    // Skip if already shown celebration in this session
+    if (hasShownCelebration.current) {
+      console.log('Skipping checkFirstSale - already shown in this session');
+      return;
+    }
+    console.log('checkFirstSale running for shop:', shop);
+    
     try {
       console.log('Checking first sale for shop:', shop);
       const response = await fetch(`/api/first-sale?shop=${encodeURIComponent(shop)}`);
@@ -945,10 +1010,22 @@ export default function DashboardPage() {
             campaign: data.campaign,
           });
           setShowFirstSale(true);
-          // Mark celebration as shown
-          await fetch(`/api/first-sale?shop=${encodeURIComponent(shop)}`, {
-            method: 'POST',
-          });
+          hasShownCelebration.current = true; // Mark as shown in this session
+          // Store in sessionStorage to persist across re-renders
+          sessionStorage.setItem(`celebration-shown-${shop}`, 'true');
+          // Mark celebration as shown on backend
+          try {
+            const postResponse = await fetch(`/api/first-sale?shop=${encodeURIComponent(shop)}`, {
+              method: 'POST',
+            });
+            if (postResponse.ok) {
+              console.log('Successfully marked celebration as shown on backend');
+            } else {
+              console.error('Failed to mark celebration as shown on backend:', postResponse.status);
+            }
+          } catch (postError) {
+            console.error('Error marking celebration as shown:', postError);
+          }
         } else {
           console.log('Not a first sale or already shown');
         }
@@ -977,7 +1054,7 @@ export default function DashboardPage() {
       <DashboardHeader shopDomain={shopDomain} />
       
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <StatusCard aiStatus={aiStatus} />
+        <StatusCard aiStatus={aiStatus} storeId={storeId} shopDomain={shopDomain} />
         
         <Tabs className="mt-8">
           <TabsList>
@@ -1023,17 +1100,17 @@ export default function DashboardPage() {
               ))}
             </div>
 
-            <MetricsGrid timeRange={timeRange} />
+            <MetricsGridComponent timeRange={timeRange} storeId={storeId || undefined} />
 
             <div className="mt-8 grid grid-cols-1 lg:grid-cols-[2fr,1fr] gap-6">
               <div className="space-y-6">
-                <PerformanceChart timeRange={timeRange} />
-                <ActivityFeed aiStatus={aiStatus} />
-                <InsightsPanel timeRange={timeRange} />
+                <PerformanceChart timeRange={timeRange} storeId={storeId || undefined} />
+                <ActivityFeedComponent aiStatus={aiStatus} storeId={storeId || undefined} />
+                <InsightsPanel timeRange={timeRange} storeId={storeId || undefined} />
               </div>
 
               <div className="space-y-6">
-                <AIControls aiStatus={aiStatus} setAiStatus={setAiStatus} />
+                <AIControls aiStatus={aiStatus} setAiStatus={setAiStatus} storeId={storeId || undefined} timeRange={timeRange} />
               </div>
             </div>
           </TabsContent>
@@ -1059,72 +1136,15 @@ export default function DashboardPage() {
                 </button>
               ))}
             </div>
-            <CampaignPerformance timeRange={timeRange} />
+            <CampaignPerformance timeRange={timeRange} storeId={storeId || undefined} />
           </TabsContent>
 
           <TabsContent hidden={activeTab !== 'abtesting'} className="mt-6">
-            <ABTestingOverview timeRange={timeRange} />
+            <ABTestingOverview timeRange={timeRange} storeId={storeId || undefined} />
           </TabsContent>
         </Tabs>
 
-        {/* Test First Sale Celebration Button */}
-        <button
-          onClick={async () => {
-            console.log('Test button clicked, shopDomain:', shopDomain);
-            if (!shopDomain) {
-              alert('No shop domain found. Please make sure you have a ?shop= parameter in the URL.');
-              return;
-            }
-            try {
-              // Simulate first sale via API
-              console.log('Simulating first sale for:', shopDomain);
-              const response = await fetch(`/api/first-sale?shop=${encodeURIComponent(shopDomain)}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  amount: 127.50,
-                  customerName: 'Sarah Johnson',
-                  recoveryTime: '15 minutes',
-                  campaign: 'Cart Abandonment'
-                })
-              });
-              console.log('PUT response status:', response.status);
-              const putData = await response.json().catch(() => ({}));
-              console.log('PUT response data:', putData);
-              
-              if (response.ok) {
-                // Trigger the celebration
-                console.log('Simulation successful, triggering checkFirstSale...');
-                await checkFirstSale(shopDomain);
-              } else {
-                alert('Failed to simulate first sale: ' + (putData.error || 'Unknown error'));
-              }
-            } catch (error) {
-              console.error('Error:', error);
-              alert('Error simulating first sale: ' + error);
-            }
-          }}
-          className="fixed bottom-4 right-4 z-40 px-4 py-2 bg-amber-600 text-white text-sm font-medium rounded-lg shadow-lg hover:bg-amber-700 transition-colors"
-        >
-          🎉 Test First Sale
-        </button>
 
-        {/* Force Show Celebration Button (for testing UI) */}
-        <button
-          onClick={() => {
-            console.log('Force showing celebration');
-            setFirstSaleData({
-              saleAmount: 127.50,
-              customerName: 'Sarah Johnson',
-              recoveryTime: '15 minutes',
-              campaign: 'Cart Abandonment'
-            });
-            setShowFirstSale(true);
-          }}
-          className="fixed bottom-4 right-40 z-40 px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg shadow-lg hover:bg-purple-700 transition-colors"
-        >
-          🎊 Force Show
-        </button>
       </main>
 
       {/* First Sale Celebration */}
@@ -1141,70 +1161,103 @@ export default function DashboardPage() {
 }
 
 // Campaign Performance Component
-function CampaignPerformance({ timeRange }: { timeRange: TimeRange }) {
-  const getCampaigns = () => {
-    const multiplier = timeRange === 'today' ? 0.05 : timeRange === '7days' ? 1 : 4.2;
-    
-    return [
-      {
-        id: 'cart',
-        name: 'Cart Abandonment',
-        icon: <ShoppingCart className="w-5 h-5" />,
-        trigger: 'Cart created, not checked out',
-        status: 'active' as const,
-        sent: Math.round(156 * multiplier),
-        conversions: Math.round(38 * multiplier),
-        revenue: Math.round(4847 * multiplier),
-        revenuePerRecipient: 31.07,
-      },
-      {
-        id: 'checkout',
-        name: 'Checkout Abandonment',
-        icon: <CreditCardIcon className="w-5 h-5" />,
-        trigger: 'Checkout started, not completed',
-        status: 'active' as const,
-        sent: Math.round(89 * multiplier),
-        conversions: Math.round(34 * multiplier),
-        revenue: Math.round(4236 * multiplier),
-        revenuePerRecipient: 47.60,
-      },
-      {
-        id: 'browse',
-        name: 'Browse Abandonment',
-        icon: <Eye className="w-5 h-5" />,
-        trigger: 'Product viewed 2+ times',
-        status: 'learning' as const,
-        sent: Math.round(64 * multiplier),
-        conversions: Math.round(12 * multiplier),
-        revenue: Math.round(1456 * multiplier),
-        revenuePerRecipient: 22.75,
-      },
-      {
-        id: 'postpurchase',
-        name: 'Post-Purchase',
-        icon: <Package className="w-5 h-5" />,
-        trigger: 'Order completed',
-        status: 'active' as const,
-        sent: Math.round(127 * multiplier),
-        conversions: 0,
-        revenue: 0,
-        revenuePerRecipient: 0,
-      },
-      {
-        id: 'repeat',
-        name: 'Repeat Purchase',
-        icon: <RefreshCw className="w-5 h-5" />,
-        trigger: 'X days after purchase',
-        status: 'learning' as const,
-        sent: Math.round(23 * multiplier),
-        conversions: Math.round(4 * multiplier),
-        revenue: Math.round(542 * multiplier),
-        revenuePerRecipient: 23.57,
-      },
-    ];
+function CampaignPerformance({ timeRange, storeId }: { timeRange: TimeRange; storeId?: string }) {
+  const [campaigns, setCampaigns] = useState<Array<{
+    id: string;
+    name: string;
+    icon: React.ReactNode;
+    trigger: string;
+    status: 'active' | 'learning';
+    sent: number;
+    conversions: number;
+    revenue: number;
+    revenuePerRecipient: number;
+  }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchCampaigns() {
+      if (!storeId) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        const response = await fetch(
+          `/api/analytics/campaign-performance/${storeId}?timeRange=${timeRange}`
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          // Map backend data to frontend format
+          const mappedCampaigns = data.map((c: any) => ({
+            id: c.campaign_type,
+            name: getCampaignName(c.campaign_type),
+            icon: getCampaignIcon(c.campaign_type),
+            trigger: getCampaignTrigger(c.campaign_type),
+            status: c.conversion_rate > 15 ? 'active' as const : 'learning' as const,
+            sent: c.emails_sent,
+            conversions: c.conversions,
+            revenue: c.revenue_generated,
+            revenuePerRecipient: c.emails_sent > 0 ? c.revenue_generated / c.emails_sent : 0,
+          }));
+          setCampaigns(mappedCampaigns);
+        } else {
+          setCampaigns([]);
+        }
+      } catch (error) {
+        console.error('Error fetching campaigns:', error);
+        setCampaigns([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchCampaigns();
+  }, [storeId, timeRange]);
+
+  const getCampaignName = (type: string) => {
+    const names: Record<string, string> = {
+      cart_abandonment: 'Cart Abandonment',
+      checkout_abandonment: 'Checkout Abandonment',
+      browse_abandonment: 'Browse Abandonment',
+      post_purchase: 'Post-Purchase',
+      repeat_purchase: 'Repeat Purchase',
+      default: 'Default Campaign'
+    };
+    return names[type] || type;
   };
 
-  const campaigns = getCampaigns();
+  const getCampaignIcon = (type: string) => {
+    switch (type) {
+      case 'cart_abandonment':
+        return <ShoppingCart className="w-5 h-5" />;
+      case 'checkout_abandonment':
+        return <CreditCardIcon className="w-5 h-5" />;
+      case 'browse_abandonment':
+        return <Eye className="w-5 h-5" />;
+      case 'post_purchase':
+        return <Package className="w-5 h-5" />;
+      case 'repeat_purchase':
+        return <RefreshCw className="w-5 h-5" />;
+      default:
+        return <Target className="w-5 h-5" />;
+    }
+  };
+
+  const getCampaignTrigger = (type: string) => {
+    const triggers: Record<string, string> = {
+      cart_abandonment: 'Cart created, not checked out',
+      checkout_abandonment: 'Checkout started, not completed',
+      browse_abandonment: 'Product viewed 2+ times',
+      post_purchase: 'Order completed',
+      repeat_purchase: 'X days after purchase',
+      default: 'Triggered by AI'
+    };
+    return triggers[type] || 'AI triggered';
+  };
+
   const totalRevenue = campaigns.reduce((sum, c) => sum + c.revenue, 0);
   const totalSent = campaigns.reduce((sum, c) => sum + c.sent, 0);
   const avgRevenuePerRecipient = totalSent > 0 ? totalRevenue / totalSent : 0;
@@ -1216,23 +1269,49 @@ function CampaignPerformance({ timeRange }: { timeRange: TimeRange }) {
         <p className="text-sm text-gray-500 mt-1">AI decides which campaign to trigger for each shopper</p>
       </div>
 
-      <div className="mb-6 grid grid-cols-3 gap-4 p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
-        <div>
-          <div className="text-xs font-medium text-emerald-700 mb-1">TOTAL REVENUE</div>
-          <div className="text-2xl font-bold text-emerald-900">${totalRevenue.toLocaleString()}</div>
+      {loading ? (
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg animate-pulse">
+            {[1, 2, 3].map((i) => (
+              <div key={i}>
+                <div className="h-3 bg-gray-200 rounded w-20 mb-2" />
+                <div className="h-8 bg-gray-200 rounded w-24" />
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="p-5 border border-gray-100 rounded-lg bg-gray-50 animate-pulse h-48" />
+            ))}
+          </div>
         </div>
-        <div>
-          <div className="text-xs font-medium text-emerald-700 mb-1">TOTAL SENT</div>
-          <div className="text-2xl font-bold text-emerald-900">{totalSent.toLocaleString()}</div>
+      ) : campaigns.length === 0 ? (
+        <div className="text-center py-12">
+          <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Target className="w-8 h-8 text-blue-400" />
+          </div>
+          <h4 className="text-lg font-medium text-gray-900 mb-2">No Campaigns Yet</h4>
+          <p className="text-sm text-gray-500">Campaign data will appear here once AI starts sending messages.</p>
         </div>
-        <div>
-          <div className="text-xs font-medium text-emerald-700 mb-1">AVG PER RECIPIENT</div>
-          <div className="text-2xl font-bold text-emerald-900">${avgRevenuePerRecipient.toFixed(2)}</div>
-        </div>
-      </div>
+      ) : (
+        <>
+          <div className="mb-6 grid grid-cols-3 gap-4 p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+            <div>
+              <div className="text-xs font-medium text-emerald-700 mb-1">TOTAL REVENUE</div>
+              <div className="text-2xl font-bold text-emerald-900 tabular-nums">{formatCompactCurrency(totalRevenue)}</div>
+            </div>
+            <div>
+              <div className="text-xs font-medium text-emerald-700 mb-1">TOTAL SENT</div>
+              <div className="text-2xl font-bold text-emerald-900 tabular-nums">{formatCompactNumber(totalSent)}</div>
+            </div>
+            <div>
+              <div className="text-xs font-medium text-emerald-700 mb-1">AVG PER RECIPIENT</div>
+              <div className="text-2xl font-bold text-emerald-900 tabular-nums">{formatRevenuePerRecipient(avgRevenuePerRecipient)}</div>
+            </div>
+          </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {campaigns.map((campaign) => {
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {campaigns.map((campaign) => {
           const conversionRate = campaign.sent > 0 
             ? ((campaign.conversions / campaign.sent) * 100).toFixed(1) 
             : '0.0';
@@ -1260,14 +1339,14 @@ function CampaignPerformance({ timeRange }: { timeRange: TimeRange }) {
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
                   <div className="text-xs text-gray-500 mb-1">Revenue Recovered</div>
-                  <div className="text-2xl font-bold text-gray-900">
-                    ${campaign.revenue.toLocaleString()}
+                  <div className="text-2xl font-bold text-gray-900 tabular-nums">
+                    {formatCompactCurrency(campaign.revenue)}
                   </div>
                 </div>
                 <div>
                   <div className="text-xs text-gray-500 mb-1">Per Recipient</div>
-                  <div className="text-2xl font-bold text-gray-900">
-                    ${campaign.revenuePerRecipient.toFixed(2)}
+                  <div className="text-2xl font-bold text-gray-900 tabular-nums">
+                    {formatRevenuePerRecipient(campaign.revenuePerRecipient)}
                   </div>
                 </div>
               </div>
@@ -1276,7 +1355,7 @@ function CampaignPerformance({ timeRange }: { timeRange: TimeRange }) {
                 <div>
                   <div className="flex items-center justify-between text-sm mb-1">
                     <span className="text-gray-600">Conversion Rate</span>
-                    <span className="font-semibold text-gray-900">{conversionRate}%</span>
+                    <span className="font-semibold text-gray-900 tabular-nums">{formatPercentage(parseFloat(conversionRate))}</span>
                   </div>
                   <Progress value={parseFloat(conversionRate)} />
                 </div>
@@ -1284,18 +1363,20 @@ function CampaignPerformance({ timeRange }: { timeRange: TimeRange }) {
                 <div className="pt-3 border-t border-gray-100 grid grid-cols-2 gap-3 text-sm">
                   <div>
                     <div className="text-gray-500">Sent</div>
-                    <div className="font-semibold text-gray-900">{campaign.sent.toLocaleString()}</div>
+                    <div className="font-semibold text-gray-900 tabular-nums">{formatCompactNumber(campaign.sent)}</div>
                   </div>
                   <div>
                     <div className="text-gray-500">Conversions</div>
-                    <div className="font-semibold text-gray-900">{campaign.conversions.toLocaleString()}</div>
+                    <div className="font-semibold text-gray-900 tabular-nums">{formatCompactNumber(campaign.conversions)}</div>
                   </div>
                 </div>
               </div>
             </div>
           );
         })}
-      </div>
+          </div>
+        </>
+      )}
     </Card>
   );
 }
@@ -1502,81 +1583,62 @@ function ExperimentCard({
 }
 
 // A/B Testing Overview Component
-function ABTestingOverview({ timeRange }: { timeRange: TimeRange }) {
+function ABTestingOverview({ timeRange, storeId }: { timeRange: TimeRange; storeId?: string }) {
   const [selectedExperiment, setSelectedExperiment] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [experiments, setExperiments] = useState<Array<any>>([]);
+  const [loading, setLoading] = useState(true);
+  const [summary, setSummary] = useState({
+    total: 0,
+    running_count: 0,
+    completed_count: 0,
+    total_revenue_lift: 0,
+    average_lift: 0
+  });
 
-  const experiments = [
-    {
-      id: '1',
-      name: 'AI Personalized Subject Lines',
-      description: 'Testing AI-generated personalized subject lines vs standard templates',
-      status: 'running' as const,
-      targetEvent: 'cart_abandonment',
-      trafficAllocation: 50,
-      startDate: '2026-02-26',
-      primaryMetric: 'revenue' as const,
-      control: { users: 1247, conversions: 283, revenue: 8621.50, conversionRate: 22.7, revenuePerUser: 6.91 },
-      treatment: { users: 1256, conversions: 389, revenue: 12896.00, conversionRate: 31.0, revenuePerUser: 10.27 },
-      statistics: { lift: 36.5, pValue: 0.003, confidenceLevel: 99.7, isSignificant: true },
-      daysRunning: 7,
-    },
-    {
-      id: '2',
-      name: 'Dynamic Discount Optimization',
-      description: 'AI-calculated optimal discount % vs fixed 10% discount',
-      status: 'running' as const,
-      targetEvent: 'checkout_abandonment',
-      trafficAllocation: 50,
-      startDate: '2026-02-28',
-      primaryMetric: 'conversion_rate' as const,
-      control: { users: 892, conversions: 267, revenue: 11234.00, conversionRate: 29.9, revenuePerUser: 12.59 },
-      treatment: { users: 901, conversions: 358, revenue: 13877.00, conversionRate: 39.7, revenuePerUser: 15.40 },
-      statistics: { lift: 32.8, pValue: 0.001, confidenceLevel: 99.9, isSignificant: true },
-      daysRunning: 5,
-    },
-    {
-      id: '3',
-      name: 'Send Time Optimization',
-      description: 'AI-predicted optimal send time vs immediate send',
-      status: 'completed' as const,
-      targetEvent: 'browse_abandonment',
-      trafficAllocation: 50,
-      startDate: '2026-02-15',
-      endDate: '2026-02-28',
-      primaryMetric: 'conversion_rate' as const,
-      control: { users: 2134, conversions: 256, revenue: 5891.00, conversionRate: 12.0, revenuePerUser: 2.76 },
-      treatment: { users: 2187, conversions: 394, revenue: 9234.00, conversionRate: 18.0, revenuePerUser: 4.22 },
-      statistics: { lift: 50.0, pValue: 0.0001, confidenceLevel: 99.99, isSignificant: true },
-      daysRunning: 13,
-    },
-    {
-      id: '4',
-      name: 'Product Recommendation Engine',
-      description: 'AI product recommendations vs most popular items',
-      status: 'paused' as const,
-      targetEvent: 'post_purchase',
-      trafficAllocation: 30,
-      startDate: '2026-03-01',
-      primaryMetric: 'aov' as const,
-      control: { users: 234, conversions: 23, revenue: 1234.00, conversionRate: 9.8, revenuePerUser: 5.27 },
-      treatment: { users: 98, conversions: 12, revenue: 678.00, conversionRate: 12.2, revenuePerUser: 6.92 },
-      statistics: { lift: 31.3, pValue: 0.234, confidenceLevel: 76.6, isSignificant: false },
-      daysRunning: 4,
-    },
-  ];
+  useEffect(() => {
+    async function fetchExperiments() {
+      if (!storeId) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        const response = await fetch(
+          `/api/experiments/${storeId}?timeRange=${timeRange}`
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          setExperiments(data.experiments || []);
+          setSummary({
+            total: data.total || 0,
+            running_count: data.running_count || 0,
+            completed_count: data.completed_count || 0,
+            total_revenue_lift: data.total_revenue_lift || 0,
+            average_lift: data.average_lift || 0
+          });
+        } else {
+          setExperiments([]);
+        }
+      } catch (error) {
+        console.error('Error fetching experiments:', error);
+        setExperiments([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchExperiments();
+  }, [storeId, timeRange]);
 
   const runningExperiments = experiments.filter(e => e.status === 'running');
   const completedExperiments = experiments.filter(e => e.status === 'completed');
 
-  const totalRevenueLift = experiments
-    .filter(e => e.status === 'running' || e.status === 'completed')
-    .reduce((sum, e) => sum + (e.treatment.revenue - e.control.revenue), 0);
-
-  const avgLift = experiments
-    .filter(e => e.statistics.isSignificant)
-    .reduce((sum, e) => sum + e.statistics.lift, 0) / 
-    experiments.filter(e => e.statistics.isSignificant).length;
+  // Use summary data from API
+  const totalRevenueLift = summary.total_revenue_lift;
+  const avgLift = summary.average_lift || 0;
 
   if (selectedExperiment) {
     const experiment = experiments.find(e => e.id === selectedExperiment);
@@ -1836,6 +1898,36 @@ function ABTestingOverview({ timeRange }: { timeRange: TimeRange }) {
         </div>
       );
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        {/* Header Stats Skeleton */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i} className="p-5">
+              <div className="animate-pulse">
+                <div className="h-4 bg-gray-200 rounded w-24 mb-2"></div>
+                <div className="h-8 bg-gray-200 rounded w-16"></div>
+              </div>
+            </Card>
+          ))}
+        </div>
+        {/* Content Skeleton */}
+        <Card className="p-6">
+          <div className="animate-pulse space-y-4">
+            <div className="h-6 bg-gray-200 rounded w-48"></div>
+            <div className="h-4 bg-gray-200 rounded w-96"></div>
+            <div className="space-y-3 mt-6">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-24 bg-gray-100 rounded-lg"></div>
+              ))}
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
   }
 
   return (

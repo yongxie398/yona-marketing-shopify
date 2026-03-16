@@ -1,7 +1,8 @@
 'use client';
 
-import { Card } from './ui/card';
+import { Card } from './ui/Card';
 import { TimeRange } from './MetricsGrid';
+import { Brain, TrendingUp, Clock, Target, AlertCircle, Lightbulb, Zap, BarChart3 } from 'lucide-react';
 
 interface InsightsPanelProps {
   timeRange: TimeRange;
@@ -20,33 +21,21 @@ function getInsights(timeRange: TimeRange): Insight[] {
     {
       id: '1',
       type: 'learning',
-      icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-        </svg>
-      ),
+      icon: <Brain className="w-4 h-4" />,
       title: 'AI Learning Active',
       description: "Agent is continuously improving send timing based on your customers' behavior patterns. Current optimization: Friday 6-9PM window.",
     },
     {
       id: '2',
       type: 'success',
-      icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-        </svg>
-      ),
+      icon: <TrendingUp className="w-4 h-4" />,
       title: 'Personalization Working',
       description: 'Emails with customer names show 67% higher open rates. AI has applied this to all campaigns automatically.',
     },
     {
       id: '3',
       type: 'info',
-      icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      ),
+      icon: <Clock className="w-4 h-4" />,
       title: 'Optimal Timing Detected',
       description: 'Cart abandonment emails sent within 2 hours show 2.3x higher conversion than 24hr delays. AI adjusted timing.',
     },
@@ -57,11 +46,7 @@ function getInsights(timeRange: TimeRange): Insight[] {
       {
         id: '4',
         type: 'success',
-        icon: (
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        ),
+        icon: <Target className="w-4 h-4" />,
         title: 'Strong Monthly Performance',
         description: 'Revenue recovery increased 35% this month. AI autonomy is delivering consistent results without manual intervention.',
       },
@@ -74,11 +59,7 @@ function getInsights(timeRange: TimeRange): Insight[] {
       {
         id: '5',
         type: 'warning',
-        icon: (
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-        ),
+        icon: <AlertCircle className="w-4 h-4" />,
         title: 'Low Activity Today',
         description: 'No conversions yet today. AI is monitoring and will engage high-intent shoppers as they appear.',
       },
@@ -108,9 +89,7 @@ export function InsightsPanel({ timeRange }: InsightsPanelProps) {
   return (
     <Card className="p-6">
       <div className="flex items-center gap-2 mb-6">
-        <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-        </svg>
+        <Brain className="w-5 h-5 text-purple-600" />
         <h3 className="text-lg font-semibold text-gray-900">AI Insights</h3>
       </div>
 

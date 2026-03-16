@@ -17,6 +17,7 @@
     "dev:monitor": "cross-env nodemon -C --exec \"ts-node --project tsconfig.node.json --transpile-only src/monitoring/webhook-monitor.ts\""
   },
   "dependencies": {
+    "@node-rs/xxhash": "^1.7.6",
     "@radix-ui/react-scroll-area": "^1.2.10",
     "@radix-ui/react-slot": "^1.2.4",
     "@shopify/app-bridge": "^3.7.9",
@@ -33,10 +34,12 @@
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.576.0",
     "next": "13.5.4",
+    "node-loader": "^2.1.0",
     "pg": "^8.17.1",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "recharts": "^3.7.0",
+    "redis": "^5.11.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
     "tw-animate-css": "^1.4.0"

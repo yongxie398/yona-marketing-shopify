@@ -19,14 +19,14 @@ export async function GET(
       );
     }
 
-    logger.info(`Fetching campaign performance for store ${storeId}`, {
-      context: 'CampaignPerformance',
+    logger.info(`Fetching AI insights for store ${storeId}`, {
+      context: 'AIInsights',
       metadata: { storeId, timeRange }
     });
 
     // Call backend API
     const response = await fetch(
-      `${BACKEND_URL}/api/v1/analytics/campaign-performance/${storeId}?time_range=${timeRange}`,
+      `${BACKEND_URL}/api/v1/ai/insights/${storeId}?time_range=${timeRange}`,
       {
         method: 'GET',
         headers: {
@@ -36,33 +36,33 @@ export async function GET(
     );
 
     if (!response.ok) {
-      logger.error(`Backend returned ${response.status} for campaign performance`, {
-        context: 'CampaignPerformance',
+      logger.error(`Backend returned ${response.status} for AI insights`, {
+        context: 'AIInsights',
         metadata: { storeId, timeRange, status: response.status }
       });
       return new Response(
-        JSON.stringify({ error: 'Failed to fetch campaign performance' }),
+        JSON.stringify({ error: 'Failed to fetch AI insights' }),
         { status: response.status, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
     const data = await response.json();
     
-    logger.info(`Campaign performance fetched successfully`, {
-      context: 'CampaignPerformance',
-      metadata: { storeId, timeRange, campaignsCount: data.length }
+    logger.info(`AI insights fetched successfully`, {
+      context: 'AIInsights',
+      metadata: { storeId, timeRange, insightsCount: data.length }
     });
 
     return new Response(JSON.stringify(data), {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (error: any) {
-    logger.error('Error fetching campaign performance:', {
-      context: 'CampaignPerformance',
+    logger.error('Error fetching AI insights:', {
+      context: 'AIInsights',
       error: error as Error,
     });
     return new Response(
-      JSON.stringify({ error: 'Failed to fetch campaign performance' }),
+      JSON.stringify({ error: 'Failed to fetch AI insights' }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }

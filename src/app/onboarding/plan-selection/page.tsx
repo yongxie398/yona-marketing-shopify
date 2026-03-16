@@ -6,6 +6,8 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
+import { useAppBridge } from '@shopify/app-bridge-react';
+import { Redirect } from '@shopify/app-bridge/actions';
 
 interface Plan {
   id: string;
@@ -252,6 +254,7 @@ export default function PlanSelectionPage() {
   const [selectedPlan, setSelectedPlan] = useState<string>('growth');
   const [projectedRevenue, setProjectedRevenue] = useState<string>('2000');
   const searchParams = useSearchParams();
+  const appBridge = useAppBridge();
 
   const currentStep = 1;
   const totalSteps = 3;
@@ -263,9 +266,9 @@ export default function PlanSelectionPage() {
     setShopDomain(shop);
   }, [searchParams]);
 
-  // Fetch store ID
+  // Fetch store ID and check if already subscribed
   useEffect(() => {
-    const fetchStoreId = async () => {
+    const fetchStoreInfo = async () => {
       if (!shopDomain) return;
 
       try {
@@ -273,13 +276,22 @@ export default function PlanSelectionPage() {
         if (response.ok) {
           const data = await response.json();
           setStoreId(data.storeId);
+          
+          // Check if user already has an active subscription
+          // If so, redirect to brand voice (they shouldn't be on plan selection)
+          if (data.hasActiveSubscription) {
+            console.log('User already has active subscription, redirecting to brand voice');
+            const host = new URLSearchParams(window.location.search).get('host') || '';
+            const redirectUrl = `/onboarding/brand-voice?shop=${encodeURIComponent(shopDomain)}&host=${encodeURIComponent(host)}`;
+            window.location.href = redirectUrl;
+          }
         }
       } catch (error) {
-        console.error('Error fetching store ID:', error);
+        console.error('Error fetching store info:', error);
       }
     };
 
-    fetchStoreId();
+    fetchStoreInfo();
   }, [shopDomain]);
 
   // Fetch plans from backend
@@ -339,8 +351,16 @@ export default function PlanSelectionPage() {
       if (response.ok) {
         const data = await response.json();
 
-        if (data.confirmation_url) {
-          window.location.href = data.confirmation_url;
+        // Check for Shopify billing confirmation URL
+        if (data.shopify_billing?.confirmation_url) {
+          // Use App Bridge Redirect to break out of iframe and go to Shopify
+          if (appBridge) {
+            const redirect = Redirect.create(appBridge);
+            redirect.dispatch(Redirect.Action.REMOTE, data.shopify_billing.confirmation_url);
+          } else {
+            // Fallback for non-embedded apps
+            window.top.location.href = data.shopify_billing.confirmation_url;
+          }
           return;
         }
 

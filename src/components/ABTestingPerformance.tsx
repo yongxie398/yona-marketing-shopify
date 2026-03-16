@@ -13,8 +13,8 @@ import {
   Clock,
   FlaskConical
 } from 'lucide-react';
-import { Card } from './ui/card';
-import { Badge } from './ui/badge';
+import { Card } from './ui/Card';
+import { Badge } from './ui/Badge';
 
 interface ABTestingPerformanceProps {
   storeId: string;
@@ -184,7 +184,7 @@ export function ABTestingPerformance({ storeId, timeRange }: ABTestingPerformanc
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-500">Last {stats.period_days} days</span>
           <Badge 
-            variant={hasSignificantData ? 'success' : 'warning'}
+            variant={hasSignificantData ? 'default' : 'secondary'}
             className="gap-1"
           >
             {hasSignificantData ? (

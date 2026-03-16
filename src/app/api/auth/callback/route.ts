@@ -260,32 +260,63 @@ export async function GET(request: NextRequest) {
         metadata: { shop: normalizedShop }
       });
 
-      // Check if this is a new store that needs onboarding
-      // Use onboarding_complete flag if available, fallback to checking brand_tone
-      const isNewStore = !registeredStore.onboarding_complete;
+      // Check onboarding status and redirect accordingly
+      // Use onboarding_step to determine the current step in the onboarding flow
+      const onboardingStep = registeredStore.onboarding_step || 'plan_selection';
+      const isOnboardingComplete = registeredStore.onboarding_complete;
       
-      // Redirect to onboarding for new stores, dashboard for existing ones
+      // Redirect based on onboarding step
       let redirectUrl: string;
-      if (isNewStore) {
-        // New store - start onboarding flow with plan selection
-        redirectUrl = `${getAppUrl()}/onboarding/plan-selection?shop=${encodeURIComponent(normalizedShop)}`;
-        if (host) {
-          redirectUrl += `&host=${encodeURIComponent(host)}`;
-        }
-        logger.info('Redirecting new store to plan selection', {
-          context: 'AuthCallback',
-          metadata: { shop: normalizedShop, isNewStore, brandTone: registeredStore.brand_tone, hasHost: !!host }
-        });
-      } else {
-        // Existing store - go to dashboard
+      if (isOnboardingComplete) {
+        // Onboarding complete - go to dashboard
         redirectUrl = `${getAppUrl()}/?shop=${encodeURIComponent(normalizedShop)}`;
         if (host) {
           redirectUrl += `&host=${encodeURIComponent(host)}`;
         }
-        logger.info('Redirecting existing store to dashboard', {
+        logger.info('Redirecting to dashboard (onboarding complete)', {
           context: 'AuthCallback',
-          metadata: { shop: normalizedShop, isNewStore, brandTone: registeredStore.brand_tone, hasHost: !!host }
+          metadata: { shop: normalizedShop, onboardingStep, hasHost: !!host }
         });
+      } else {
+        // Onboarding not complete - redirect to next step based on completed step
+        // onboarding_step represents the LAST COMPLETED step
+        switch (onboardingStep) {
+          case 'plan_selection':
+            // Plan selection completed, go to brand voice
+            redirectUrl = `${getAppUrl()}/onboarding/brand-voice?shop=${encodeURIComponent(normalizedShop)}`;
+            logger.info('Redirecting to brand voice onboarding (after plan selection)', {
+              context: 'AuthCallback',
+              metadata: { shop: normalizedShop, onboardingStep, hasHost: !!host }
+            });
+            break;
+          case 'brand_voice':
+            // Brand voice completed, go to AI live
+            redirectUrl = `${getAppUrl()}/onboarding/ai-live?shop=${encodeURIComponent(normalizedShop)}`;
+            logger.info('Redirecting to AI live onboarding (after brand voice)', {
+              context: 'AuthCallback',
+              metadata: { shop: normalizedShop, onboardingStep, hasHost: !!host }
+            });
+            break;
+          case 'ai_live':
+            // AI live completed, go to dashboard
+            redirectUrl = `${getAppUrl()}/?shop=${encodeURIComponent(normalizedShop)}`;
+            logger.info('Redirecting to dashboard (after AI live)', {
+              context: 'AuthCallback',
+              metadata: { shop: normalizedShop, onboardingStep, hasHost: !!host }
+            });
+            break;
+          default:
+            // No steps completed yet, start with plan selection
+            redirectUrl = `${getAppUrl()}/onboarding/plan-selection?shop=${encodeURIComponent(normalizedShop)}`;
+            logger.info('Redirecting to plan selection onboarding (starting onboarding)', {
+              context: 'AuthCallback',
+              metadata: { shop: normalizedShop, onboardingStep, hasHost: !!host }
+            });
+            break;
+        }
+        if (host) {
+          redirectUrl += `&host=${encodeURIComponent(host)}`;
+        }
       }
       
       // Pass id_token or session if available for authentication

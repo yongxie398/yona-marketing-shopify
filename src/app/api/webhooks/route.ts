@@ -54,6 +54,59 @@ export async function POST(request: NextRequest) {
     // Parse the payload
     const webhookData = JSON.parse(payload);
     
+    // Log raw checkout URL for checkout events (for debugging)
+    if (topic?.includes('checkouts')) {
+      let rawCheckoutUrl = webhookData.abandoned_checkout_url || webhookData.checkout_url;
+      if (rawCheckoutUrl) {
+        // Clean up the URL - remove backticks, quotes, and extra spaces that may be in the payload
+        const originalUrl = rawCheckoutUrl;
+        rawCheckoutUrl = rawCheckoutUrl.trim();
+        while (rawCheckoutUrl.startsWith('`')) rawCheckoutUrl = rawCheckoutUrl.slice(1);
+        while (rawCheckoutUrl.endsWith('`')) rawCheckoutUrl = rawCheckoutUrl.slice(0, -1);
+        rawCheckoutUrl = rawCheckoutUrl.trim().replace(/^["']|["']$/g, '');
+        
+        // Update the webhook data with cleaned URL
+        if (webhookData.abandoned_checkout_url) {
+          webhookData.abandoned_checkout_url = rawCheckoutUrl;
+        }
+        if (webhookData.checkout_url) {
+          webhookData.checkout_url = rawCheckoutUrl;
+        }
+        
+        if (originalUrl !== rawCheckoutUrl) {
+          logger.warn('Checkout URL contained backticks/quotes - cleaned', {
+            context: 'WebhookHandler',
+            metadata: {
+              shop,
+              topic,
+              originalUrl: originalUrl.substring(0, 100),
+              cleanedUrl: rawCheckoutUrl.substring(0, 100)
+            }
+          });
+        }
+        
+        logger.info('RAW CHECKOUT URL FROM SHOPIFY', {
+          context: 'WebhookHandler',
+          metadata: {
+            shop,
+            topic,
+            rawCheckoutUrl: rawCheckoutUrl.substring(0, 150),
+            rawCheckoutUrlLength: rawCheckoutUrl.length,
+            fullRawCheckoutUrl: rawCheckoutUrl
+          }
+        });
+      } else {
+        logger.warn('No checkout URL found in checkout webhook', {
+          context: 'WebhookHandler',
+          metadata: {
+            shop,
+            topic,
+            availableKeys: Object.keys(webhookData)
+          }
+        });
+      }
+    }
+    
     logger.info('Webhook received', {
       context: 'WebhookHandler',
       metadata: { 

@@ -13,25 +13,45 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Query the backend API to get the store information
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
-    const response = await fetch(`${backendUrl}/api/v1/stores/domain/${shop}`, {
+
+    // Fetch store information
+    const storeResponse = await fetch(`${backendUrl}/api/v1/stores/domain/${shop}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
       },
     });
 
-    if (!response.ok) {
+    if (!storeResponse.ok) {
       return Response.json(
         { error: 'Store not found' },
         { status: 404 }
       );
     }
 
-    const store = await response.json();
+    const store = await storeResponse.json();
 
-    // Return store information in the same format as before
+    // Fetch subscription information to check if user has active subscription
+    let hasActiveSubscription = false;
+    try {
+      const subscriptionResponse = await fetch(`${backendUrl}/api/v1/billing/stores/${store.id}/subscription`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (subscriptionResponse.ok) {
+        const subscription = await subscriptionResponse.json();
+        hasActiveSubscription = subscription.status === 'active' || subscription.status === 'pending';
+      }
+    } catch (error) {
+      console.error('Error fetching subscription info:', error);
+      // Continue without subscription info - assume no active subscription
+    }
+
+    // Return store information including onboarding status and subscription status
     return Response.json({
       storeId: store.id,
       domain: store.domain,
@@ -40,6 +60,10 @@ export async function GET(request: NextRequest) {
       createdAt: store.created_at,
       updatedAt: store.updated_at,
       configUpdatedAt: store.config_updated_at,
+      onboardingComplete: store.onboarding_complete,
+      onboardingStep: store.onboarding_step,
+      brandTone: store.brand_tone,
+      hasActiveSubscription,
     });
   } catch (error) {
     console.error('Error fetching store info:', error);

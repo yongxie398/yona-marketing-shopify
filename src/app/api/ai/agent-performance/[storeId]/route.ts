@@ -10,7 +10,7 @@ export async function GET(
   try {
     const { storeId } = params;
     const { searchParams } = new URL(request.url);
-    const timeRange = searchParams.get('timeRange') || '30days';
+    const timeRange = searchParams.get('timeRange') || '7days';
 
     if (!storeId) {
       return new Response(
@@ -19,14 +19,14 @@ export async function GET(
       );
     }
 
-    logger.info(`Fetching campaign performance for store ${storeId}`, {
-      context: 'CampaignPerformance',
+    logger.info(`Fetching agent performance for store ${storeId}`, {
+      context: 'AgentPerformance',
       metadata: { storeId, timeRange }
     });
 
     // Call backend API
     const response = await fetch(
-      `${BACKEND_URL}/api/v1/analytics/campaign-performance/${storeId}?time_range=${timeRange}`,
+      `${BACKEND_URL}/api/v1/ai/agent-performance/${storeId}?time_range=${timeRange}`,
       {
         method: 'GET',
         headers: {
@@ -36,33 +36,33 @@ export async function GET(
     );
 
     if (!response.ok) {
-      logger.error(`Backend returned ${response.status} for campaign performance`, {
-        context: 'CampaignPerformance',
+      logger.error(`Backend returned ${response.status} for agent performance`, {
+        context: 'AgentPerformance',
         metadata: { storeId, timeRange, status: response.status }
       });
       return new Response(
-        JSON.stringify({ error: 'Failed to fetch campaign performance' }),
+        JSON.stringify({ error: 'Failed to fetch agent performance' }),
         { status: response.status, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
     const data = await response.json();
     
-    logger.info(`Campaign performance fetched successfully`, {
-      context: 'CampaignPerformance',
-      metadata: { storeId, timeRange, campaignsCount: data.length }
+    logger.info(`Agent performance fetched successfully`, {
+      context: 'AgentPerformance',
+      metadata: { storeId, timeRange, decisionSpeed: data.decision_speed_seconds }
     });
 
     return new Response(JSON.stringify(data), {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (error: any) {
-    logger.error('Error fetching campaign performance:', {
-      context: 'CampaignPerformance',
+    logger.error('Error fetching agent performance:', {
+      context: 'AgentPerformance',
       error: error as Error,
     });
     return new Response(
-      JSON.stringify({ error: 'Failed to fetch campaign performance' }),
+      JSON.stringify({ error: 'Failed to fetch agent performance' }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }

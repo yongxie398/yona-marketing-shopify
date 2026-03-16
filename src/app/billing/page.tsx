@@ -163,8 +163,8 @@ interface BillingDashboard {
   show_upgrade_banner: boolean;
 }
 
-// Mock data - In production, this would come from API
-const mockBillingData: BillingDashboard = {
+// Default initial data - will be replaced by API response
+const defaultBillingData: BillingDashboard = {
   plan: {
     name: 'Starter',
     type: 'starter',
@@ -177,16 +177,16 @@ const mockBillingData: BillingDashboard = {
     first_month_days_remaining: 22,
   },
   metrics: {
-    recovered_revenue: 847.50,
-    billable_revenue: 847.50,
+    recovered_revenue: 0,
+    billable_revenue: 0,
     estimated_fee: 0,
     base_monthly_fee: 0,
   },
-  show_upgrade_banner: true,
+  show_upgrade_banner: false,
 };
 
 export default function BillingPage() {
-  const [billingData, setBillingData] = useState<BillingDashboard>(mockBillingData);
+  const [billingData, setBillingData] = useState<BillingDashboard>(defaultBillingData);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isUpgrading, setIsUpgrading] = useState(false);

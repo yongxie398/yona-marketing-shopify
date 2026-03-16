@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { formatTimestampLocal } from '@/utils/formatters';
 
 // GET /api/decisions - Retrieve AI decisions for a specific store
 export async function GET(request: NextRequest) {
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
       value: decision.revenue_impact ? `$${decision.revenue_impact.toFixed(2)}` : '',
       reason: formatDecisionReason(decision.decision_type, decision.campaign_type),
       result: formatDecisionResult(decision.decision_type, decision.campaign_type),
-      timestamp: formatTimestamp(decision.created_at),
+      timestamp: formatTimestampLocal(decision.created_at),
       impact: calculateImpact(decision.revenue_impact)
     }));
 
@@ -94,11 +95,7 @@ function formatDecisionResult(decision_type: string, campaign_type: string): str
   return 'Customer will be skipped for now';
 }
 
-function formatTimestamp(dateString: string): string {
-  if (!dateString) return 'N/A';
-  const date = new Date(dateString);
-  return date.toLocaleString();
-}
+
 
 function calculateImpact(revenue_impact: number): string {
   if (revenue_impact === undefined || revenue_impact === null) return 'N/A';

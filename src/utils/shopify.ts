@@ -192,8 +192,12 @@ export async function getProductInfo(shopDomain: string, productId: string): Pro
  * @returns Promise<any> Cart data
  */
 export async function getCartInfo(shopDomain: string, cartToken: string): Promise<any> {
-  // Note: Shopify's cart API is limited, so this would typically use custom cart persistence
-  // For now, we'll return a placeholder
+  // Note: Shopify's cart API is limited and doesn't provide a direct way to fetch cart data by token.
+  // In production, you would need to:
+  // 1. Use Shopify's Storefront API with a customer access token
+  // 2. Or maintain your own cart persistence layer
+  // 3. Or use Shopify's AJAX Cart API from the storefront
+  // This is a stub that should be implemented based on your specific cart persistence strategy.
   console.log(`Getting cart info for cart token: ${cartToken} on shop: ${shopDomain}`);
   return {
     token: cartToken,

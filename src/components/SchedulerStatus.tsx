@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card } from "./ui/Card";
-import { Badge } from "./ui/Badge";
+import { Card } from "./ui/card";
+import { Badge } from "./ui/badge";
 import { Play, Pause, Clock, RefreshCw, Settings } from "lucide-react";
 import logger from '@/utils/logger';
 

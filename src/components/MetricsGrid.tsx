@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { TrendingUp, TrendingDown, DollarSign, Target, Users } from "lucide-react";
-import { Card } from "./ui/Card";
+import { Card } from "./ui/card";
 import logger from '@/utils/logger';
 import { formatCompactCurrency, formatROI, formatRevenuePerRecipient, formatPercentage } from '@/utils/formatters';
 

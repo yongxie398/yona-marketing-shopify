@@ -1,6 +1,6 @@
 'use client';
 
-import { Card } from './ui/Card';
+import { Card } from './ui/card';
 import { TimeRange } from './MetricsGrid';
 import { Brain, TrendingUp, Clock, Target, AlertCircle, Lightbulb, Zap, BarChart3 } from 'lucide-react';
 

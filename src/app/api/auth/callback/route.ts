@@ -158,6 +158,7 @@ export async function GET(request: NextRequest) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-API-Key': env.CORE_AI_SERVICE_API_KEY || '',
         },
         body: JSON.stringify(storeData),
         redirect: 'manual' // Don't follow redirects automatically

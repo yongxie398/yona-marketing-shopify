@@ -6,6 +6,7 @@ interface EnvConfig {
   SHOPIFY_APP_URL: string;
   NEXT_PUBLIC_SHOPIFY_API_KEY: string;
   BACKEND_URL: string;
+  CORE_AI_SERVICE_API_KEY?: string;
   DATABASE_URL?: string;
   DB_USER?: string;
   DB_HOST?: string;
@@ -58,6 +59,7 @@ export default {
   SHOPIFY_APP_URL: getEnvVar('SHOPIFY_APP_URL'),
   NEXT_PUBLIC_SHOPIFY_API_KEY: getEnvVar('NEXT_PUBLIC_SHOPIFY_API_KEY'),
   BACKEND_URL: getEnvVar('BACKEND_URL'),
+  CORE_AI_SERVICE_API_KEY: getOptionalEnvVar('CORE_AI_SERVICE_API_KEY', ''),
   DATABASE_URL: getOptionalEnvVar('DATABASE_URL'),
   DB_USER: getOptionalEnvVar('DB_USER', 'postgres'),
   DB_HOST: getOptionalEnvVar('DB_HOST', 'localhost'),

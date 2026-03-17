@@ -11,6 +11,7 @@ out/
 
 # Local env files
 .env.local
+.env.production
 .env.production.local
 .env.development.local
 

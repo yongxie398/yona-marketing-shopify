@@ -120,6 +120,7 @@ export async function POST(request: NextRequest) {
         status: updates.status,
         currency: updates.currency,
         onboarding_complete: updates.onboarding_complete,
+        onboarding_step: updates.onboarding_step,
         config_updated_at: new Date().toISOString(),
       }),
     });

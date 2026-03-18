@@ -14,7 +14,13 @@
     "worker:start": "cross-env ts-node --project tsconfig.node.json --transpile-only src/workers/webhook-worker.ts",
     "monitor:start": "cross-env ts-node --project tsconfig.node.json --transpile-only src/monitoring/webhook-monitor.ts",
     "dev:worker": "cross-env nodemon -C --exec \"ts-node --project tsconfig.node.json --transpile-only src/workers/webhook-worker.ts\"",
-    "dev:monitor": "cross-env nodemon -C --exec \"ts-node --project tsconfig.node.json --transpile-only src/monitoring/webhook-monitor.ts\""
+    "dev:monitor": "cross-env nodemon -C --exec \"ts-node --project tsconfig.node.json --transpile-only src/monitoring/webhook-monitor.ts\"",
+    "railway": "railway",
+    "railway:login": "railway login",
+    "railway:status": "railway status",
+    "railway:logs": "railway logs",
+    "railway:deploy": "railway up",
+    "railway:whoami": "railway whoami"
   },
   "dependencies": {
     "@node-rs/xxhash": "^1.7.6",
@@ -61,11 +67,13 @@
     "ngrok": "^5.0.0-beta.2",
     "nodemon": "^3.1.11",
     "postcss": "^8.5.8",
+    "railway": "^2.0.17",
     "tailwindcss": "^4.2.1",
     "ts-jest": "^29.4.6",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vercel": "^50.32.5"
   },
   "keywords": [
     "shopify",

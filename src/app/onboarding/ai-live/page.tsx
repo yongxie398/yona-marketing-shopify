@@ -160,7 +160,9 @@ export default function AILiveConfirmationPage() {
         body: JSON.stringify({
           store_id: storeId,
           paused: false,
-          ai_enabled: true
+          ai_enabled: true,
+          onboarding_step: 'ai_live',
+          onboarding_complete: true,
         }),
       });
 

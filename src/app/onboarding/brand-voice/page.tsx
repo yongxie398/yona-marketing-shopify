@@ -237,7 +237,7 @@ export default function BrandVoicePage() {
         },
         body: JSON.stringify({
           brand_voice: selectedVoice,
-          onboarding_complete: true,
+          onboarding_step: 'brand_voice',
         }),
       });
 

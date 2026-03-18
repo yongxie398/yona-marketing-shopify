@@ -365,6 +365,22 @@ export default function PlanSelectionPage() {
         }
 
         if (shopDomain) {
+          // Update onboarding_step to indicate plan selection is completed
+          try {
+            await fetch(`/api/settings?shop=${encodeURIComponent(shopDomain)}`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                onboarding_step: 'plan_selection',
+              }),
+            });
+          } catch (err) {
+            console.error('Error updating onboarding step:', err);
+            // Continue to redirect even if update fails
+          }
+
           const host = new URLSearchParams(window.location.search).get('host') || '';
           const redirectUrl = `/onboarding/brand-voice?shop=${encodeURIComponent(shopDomain)}&host=${encodeURIComponent(host)}`;
           window.location.href = redirectUrl;

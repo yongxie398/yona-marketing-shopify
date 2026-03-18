@@ -263,7 +263,8 @@ export async function GET(request: NextRequest) {
 
       // Check onboarding status and redirect accordingly
       // Use onboarding_step to determine the current step in the onboarding flow
-      const onboardingStep = registeredStore.onboarding_step || 'plan_selection';
+      // onboarding_step represents the LAST COMPLETED step (null/empty = nothing completed yet)
+      const onboardingStep = registeredStore.onboarding_step;
       const isOnboardingComplete = registeredStore.onboarding_complete;
       
       // Redirect based on onboarding step
@@ -279,8 +280,8 @@ export async function GET(request: NextRequest) {
           metadata: { shop: normalizedShop, onboardingStep, hasHost: !!host }
         });
       } else {
-        // Onboarding not complete - redirect to next step based on completed step
-        // onboarding_step represents the LAST COMPLETED step
+        // Onboarding not complete - redirect to next step based on LAST COMPLETED step
+        // onboarding_step represents the LAST COMPLETED step (null/empty = nothing completed yet)
         switch (onboardingStep) {
           case 'plan_selection':
             // Plan selection completed, go to brand voice
@@ -299,7 +300,7 @@ export async function GET(request: NextRequest) {
             });
             break;
           case 'ai_live':
-            // AI live completed, go to dashboard
+            // AI live completed, go to dashboard (should not happen if onboarding_complete is false, but handle it)
             redirectUrl = `${getAppUrl()}/?shop=${encodeURIComponent(normalizedShop)}`;
             logger.info('Redirecting to dashboard (after AI live)', {
               context: 'AuthCallback',
@@ -307,9 +308,9 @@ export async function GET(request: NextRequest) {
             });
             break;
           default:
-            // No steps completed yet, start with plan selection
+            // No steps completed yet (null/empty/unknown), start with plan selection
             redirectUrl = `${getAppUrl()}/onboarding/plan-selection?shop=${encodeURIComponent(normalizedShop)}`;
-            logger.info('Redirecting to plan selection onboarding (starting onboarding)', {
+            logger.info('Redirecting to plan selection onboarding (new store)', {
               context: 'AuthCallback',
               metadata: { shop: normalizedShop, onboardingStep, hasHost: !!host }
             });

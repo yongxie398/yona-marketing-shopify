@@ -878,6 +878,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [showFirstSale, setShowFirstSale] = useState(false);
   const hasShownCelebration = useRef(false);
+  const pollingStarted = useRef(false);
   const [firstSaleData, setFirstSaleData] = useState({
     saleAmount: 0,
     customerName: 'Customer',
@@ -920,9 +921,9 @@ export default function DashboardPage() {
       console.log('Celebration not shown yet in this session');
     }
 
-    // Check for first sale celebration
-    if (shop) {
-      checkFirstSale(shop);
+    // Check for first sale celebration - only start polling once
+    if (shop && !pollingStarted.current) {
+      pollingStarted.current = true;
       
       // Set up polling with exponential backoff on errors
       let intervalMs = 5000;

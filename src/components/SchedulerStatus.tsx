@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Play, Pause, Clock, RefreshCw, Settings } from "lucide-react";
@@ -26,9 +26,13 @@ export function SchedulerStatus({ storeId }: SchedulerStatusProps) {
   const [status, setStatus] = useState<SchedulerState | null>(null);
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
+  const hasFetched = useRef(false);
 
   useEffect(() => {
     async function fetchStatus() {
+      if (hasFetched.current) return;
+      hasFetched.current = true;
+
       try {
         setLoading(true);
 

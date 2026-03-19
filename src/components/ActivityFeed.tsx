@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -156,13 +156,15 @@ export function ActivityFeed({ aiStatus, storeId }: ActivityFeedProps) {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const hasFetched = useRef(false);
 
   useEffect(() => {
     async function fetchActivities() {
-      if (!storeId || aiStatus === "paused") {
+      if (!storeId || aiStatus === "paused" || hasFetched.current) {
         setLoading(false);
         return;
       }
+      hasFetched.current = true;
 
       try {
         setLoading(true);

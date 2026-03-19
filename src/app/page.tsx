@@ -252,12 +252,15 @@ function StatusCard({ aiStatus, storeId, shopDomain }: { aiStatus: AIStatus; sto
   });
   const [loading, setLoading] = useState(true);
 
+  const statusMetricsFetched = useRef(false);
+
   useEffect(() => {
     async function fetchStatusMetrics() {
-      if (!storeId) {
+      if (!storeId || statusMetricsFetched.current) {
         setLoading(false);
         return;
       }
+      statusMetricsFetched.current = true;
 
       try {
         setLoading(true);

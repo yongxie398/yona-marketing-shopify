@@ -43,6 +43,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { MetricsGrid as MetricsGridComponent } from '@/components/MetricsGrid';
 import { ActivityFeed as ActivityFeedComponent } from '@/components/ActivityFeed';
 import { formatCompactCurrency, formatCompactNumber, formatRevenuePerRecipient, formatPercentage, convertUTCToLocalTime, getLocalDayName } from '@/utils/formatters';
+import { useRevenueAnalytics, useCampaignPerformance, useFirstSaleStatus, useAgentPerformance, useAIInsights, usePerformanceChart } from '@/hooks/useDashboardData';
 
 // Types
 export type TimeRange = 'today' | '7days' | '30days';
@@ -245,94 +246,32 @@ function DashboardHeader({ shopDomain }: { shopDomain?: string | null }) {
 
 // Status Card Component
 function StatusCard({ aiStatus, storeId, shopDomain }: { aiStatus: AIStatus; storeId?: string; shopDomain?: string | null }) {
-  const [metrics, setMetrics] = useState({
-    revenue: 0,
-    activeInterventions: 0,
-    timeToFirstSale: '--'
-  });
-  const [loading, setLoading] = useState(true);
+  // Use SWR hooks for data fetching with automatic deduplication
+  const { revenue, isLoading: revenueLoading } = useRevenueAnalytics(storeId, 'today');
+  const { campaigns, isLoading: campaignsLoading } = useCampaignPerformance(storeId, 'today');
+  const { firstSaleData, isLoading: firstSaleLoading } = useFirstSaleStatus(shopDomain || null);
 
-  const statusMetricsFetched = useRef(false);
+  // Calculate metrics from SWR data
+  const revenueValue = revenue?.attributed_revenue || 0;
+  const activeInterventions = Array.isArray(campaigns) 
+    ? campaigns.reduce((sum: number, campaign: any) => sum + (campaign.emails_sent || 0), 0)
+    : 0;
 
-  useEffect(() => {
-    async function fetchStatusMetrics() {
-      if (!storeId || statusMetricsFetched.current) {
-        setLoading(false);
-        return;
-      }
-      statusMetricsFetched.current = true;
-
-      try {
-        setLoading(true);
-        // Fetch revenue metrics
-        const revenueResponse = await fetch(
-          `/api/analytics/revenue/${storeId}?timeRange=today`,
-          { headers: { 'Content-Type': 'application/json' } }
-        );
-
-        let revenue = 0;
-        if (revenueResponse.ok) {
-          const revenueData = await revenueResponse.json();
-          revenue = revenueData.attributed_revenue || 0;
-        }
-
-        // Fetch campaign performance for active interventions
-        const campaignResponse = await fetch(
-          `/api/analytics/campaign-performance/${storeId}?timeRange=today`,
-          { headers: { 'Content-Type': 'application/json' } }
-        );
-
-        let activeInterventions = 0;
-        if (campaignResponse.ok) {
-          const campaignData = await campaignResponse.json();
-          // Sum up emails sent today across all campaign types
-          if (Array.isArray(campaignData)) {
-            activeInterventions = campaignData.reduce((sum: number, campaign: any) => {
-              return sum + (campaign.emails_sent || 0);
-            }, 0);
-          }
-        }
-
-        // Fetch first sale info
-        let timeToFirstSale = '--';
-        if (shopDomain) {
-          try {
-            const firstSaleResponse = await fetch(
-              `/api/first-sale?shop=${encodeURIComponent(shopDomain)}`,
-              { headers: { 'Content-Type': 'application/json' } }
-            );
-            if (firstSaleResponse.ok) {
-              const firstSaleData = await firstSaleResponse.json();
-              if (firstSaleData.isFirstSale) {
-                timeToFirstSale = 'Pending';
-              } else if (firstSaleData.timeToFirstSale) {
-                // Use the calculated time to first sale from backend
-                timeToFirstSale = firstSaleData.timeToFirstSale;
-              } else if (firstSaleData.recoveredAt) {
-                timeToFirstSale = 'Achieved';
-              } else {
-                timeToFirstSale = 'In Progress';
-              }
-            }
-          } catch (e) {
-            // Ignore first sale fetch errors
-          }
-        }
-
-        setMetrics({
-          revenue,
-          activeInterventions,
-          timeToFirstSale
-        });
-      } catch (error) {
-        console.error('Error fetching status metrics:', error);
-      } finally {
-        setLoading(false);
-      }
+  // Determine time to first sale
+  let timeToFirstSale = '--';
+  if (firstSaleData) {
+    if (firstSaleData.isFirstSale) {
+      timeToFirstSale = 'Pending';
+    } else if (firstSaleData.timeToFirstSale) {
+      timeToFirstSale = firstSaleData.timeToFirstSale;
+    } else if (firstSaleData.recoveredAt) {
+      timeToFirstSale = 'Achieved';
+    } else {
+      timeToFirstSale = 'In Progress';
     }
+  }
 
-    fetchStatusMetrics();
-  }, [storeId]);
+  const loading = revenueLoading || campaignsLoading || firstSaleLoading;
 
   const formatRevenue = (value: number) => {
     return formatCompactCurrency(value);
@@ -372,7 +311,7 @@ function StatusCard({ aiStatus, storeId, shopDomain }: { aiStatus: AIStatus; sto
             <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Revenue Recovered</span>
           </div>
           <div className="text-3xl font-bold text-gray-900 mb-1 tabular-nums">
-            {loading ? '-' : formatRevenue(metrics.revenue)}
+            {loading ? '-' : formatRevenue(revenueValue)}
           </div>
           <p className="text-xs text-gray-500">Today</p>
         </div>
@@ -383,7 +322,7 @@ function StatusCard({ aiStatus, storeId, shopDomain }: { aiStatus: AIStatus; sto
             <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Active Interventions</span>
           </div>
           <div className="text-3xl font-bold text-gray-900 mb-1 tabular-nums">
-            {loading ? '-' : formatCompactNumber(metrics.activeInterventions)}
+            {loading ? '-' : formatCompactNumber(activeInterventions)}
           </div>
           <p className="text-xs text-gray-500">
             {aiStatus === 'active' ? 'Monitoring shoppers' : 'Paused'}
@@ -395,8 +334,8 @@ function StatusCard({ aiStatus, storeId, shopDomain }: { aiStatus: AIStatus; sto
             <Clock className="w-5 h-5 text-purple-600" />
             <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Time to First Sale</span>
           </div>
-          <div className="text-3xl font-bold text-gray-900 mb-1" title={metrics.timeToFirstSale === 'In Progress' ? 'AI is actively working toward your first sale. Typically 3-7 days.' : ''}>
-            {metrics.timeToFirstSale === 'In Progress' ? (
+          <div className="text-3xl font-bold text-gray-900 mb-1" title={timeToFirstSale === 'In Progress' ? 'AI is actively working toward your first sale. Typically 3-7 days.' : ''}>
+            {timeToFirstSale === 'In Progress' ? (
               <span className="flex items-center gap-2">
                 <span className="relative flex h-3 w-3">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
@@ -404,18 +343,18 @@ function StatusCard({ aiStatus, storeId, shopDomain }: { aiStatus: AIStatus; sto
                 </span>
                 <span className="text-lg text-purple-600">Active</span>
               </span>
-            ) : metrics.timeToFirstSale === 'Pending' ? (
+            ) : timeToFirstSale === 'Pending' ? (
               <span className="text-2xl text-gray-500">--</span>
-            ) : metrics.timeToFirstSale === 'Achieved' ? (
+            ) : timeToFirstSale === 'Achieved' ? (
               <span className="text-2xl text-emerald-600">✓</span>
             ) : (
-              <span className="tabular-nums">{metrics.timeToFirstSale}</span>
+              <span className="tabular-nums">{timeToFirstSale}</span>
             )}
           </div>
           <p className="text-xs text-gray-500">
-            {metrics.timeToFirstSale === 'In Progress' ? 'Working toward first sale' : 
-             metrics.timeToFirstSale === 'Pending' ? 'Waiting for first event' : 
-             metrics.timeToFirstSale === 'Achieved' ? 'First sale recovered!' : 
+            {timeToFirstSale === 'In Progress' ? 'Working toward first sale' : 
+             timeToFirstSale === 'Pending' ? 'Waiting for first event' : 
+             timeToFirstSale === 'Achieved' ? 'First sale recovered!' : 
              'First sale achieved'}
           </p>
         </div>
@@ -427,48 +366,18 @@ function StatusCard({ aiStatus, storeId, shopDomain }: { aiStatus: AIStatus; sto
 // Metric Card Component
 // Performance Chart Component
 function PerformanceChart({ timeRange, storeId }: { timeRange: TimeRange; storeId?: string }) {
-  const [data, setData] = useState<Array<{ time: string; revenue: number; emails: number }>>([]);
-  const [loading, setLoading] = useState(true);
+  // Use SWR hook for chart data
+  const { chartData, isLoading: loading } = usePerformanceChart(storeId, timeRange);
 
-  useEffect(() => {
-    async function fetchChartData() {
-      if (!storeId) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        setLoading(true);
-        const response = await fetch(
-          `/api/analytics/performance-chart/${storeId}?timeRange=${timeRange}`
-        );
-
-        if (response.ok) {
-          const chartData = await response.json();
-          // Convert time format based on timeRange
-          const localData = chartData.map((item: { time: string; revenue: number; emails: number }) => ({
-            ...item,
-            time: timeRange === 'today' 
-              ? convertUTCToLocalTime(item.time)  // HH:MM format
-              : timeRange === '7days'
-                ? getLocalDayName(item.time)  // Convert ISO date to local day name
-                : item.time  // '30days' - Week labels, no conversion needed
-          }));
-          setData(localData);
-        } else {
-          // Fallback to empty data on error
-          setData([]);
-        }
-      } catch (error) {
-        console.error('Error fetching chart data:', error);
-        setData([]);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchChartData();
-  }, [storeId, timeRange]);
+  // Convert time format based on timeRange
+  const data = chartData.map((item: { time: string; revenue: number; emails: number }) => ({
+    ...item,
+    time: timeRange === 'today' 
+      ? convertUTCToLocalTime(item.time)  // HH:MM format
+      : timeRange === '7days'
+        ? getLocalDayName(item.time)  // Convert ISO date to local day name
+        : item.time  // '30days' - Week labels, no conversion needed
+  }));
 
   return (
     <Card className="p-6">
@@ -572,45 +481,8 @@ function PerformanceChart({ timeRange, storeId }: { timeRange: TimeRange; storeI
 
 // AI Controls Component
 function AIControls({ aiStatus, setAiStatus, storeId, timeRange }: { aiStatus: AIStatus; setAiStatus: (status: AIStatus) => void; storeId?: string; timeRange: TimeRange }) {
-  const [performance, setPerformance] = useState({
-    decision_speed_seconds: 0,
-    learning_rate_percent: 0,
-    total_decisions: 0,
-    loading: true
-  });
-
-  useEffect(() => {
-    async function fetchPerformance() {
-      if (!storeId) {
-        setPerformance(prev => ({ ...prev, loading: false }));
-        return;
-      }
-
-      try {
-        setPerformance(prev => ({ ...prev, loading: true }));
-        const response = await fetch(
-          `/api/ai/agent-performance/${storeId}?timeRange=${timeRange}`
-        );
-
-        if (response.ok) {
-          const data = await response.json();
-          setPerformance({
-            decision_speed_seconds: data.decision_speed_seconds || 0,
-            learning_rate_percent: data.learning_rate_percent || 0,
-            total_decisions: data.total_decisions || 0,
-            loading: false
-          });
-        } else {
-          setPerformance(prev => ({ ...prev, loading: false }));
-        }
-      } catch (error) {
-        console.error('Error fetching agent performance:', error);
-        setPerformance(prev => ({ ...prev, loading: false }));
-      }
-    }
-
-    fetchPerformance();
-  }, [storeId, timeRange]);
+  // Use SWR hook for agent performance
+  const { performance, isLoading: loading } = useAgentPerformance(storeId, timeRange);
 
   return (
     <Card className="p-6">
@@ -676,7 +548,7 @@ function AIControls({ aiStatus, setAiStatus, storeId, timeRange }: { aiStatus: A
             <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
               <div className="text-xs text-emerald-700 font-medium">Decision Speed</div>
               <div className="text-xl font-bold text-emerald-900 mt-1">
-                {performance.loading ? (
+                {loading ? (
                   <span className="animate-pulse">...</span>
                 ) : (
                   `${performance.decision_speed_seconds.toFixed(1)}s`
@@ -687,7 +559,7 @@ function AIControls({ aiStatus, setAiStatus, storeId, timeRange }: { aiStatus: A
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <div className="text-xs text-blue-700 font-medium">Learning Rate</div>
               <div className="text-xl font-bold text-blue-900 mt-1">
-                {performance.loading ? (
+                {loading ? (
                   <span className="animate-pulse">...</span>
                 ) : (
                   `${performance.learning_rate_percent >= 0 ? '+' : ''}${performance.learning_rate_percent.toFixed(1)}%`
@@ -696,7 +568,7 @@ function AIControls({ aiStatus, setAiStatus, storeId, timeRange }: { aiStatus: A
               <div className="text-xs text-blue-600 mt-1">Improvement/week</div>
             </div>
           </div>
-          {!performance.loading && performance.total_decisions > 0 && (
+          {!loading && performance.total_decisions > 0 && (
             <p className="text-xs text-gray-500 text-center">
               Based on {performance.total_decisions} decisions
             </p>
@@ -718,59 +590,24 @@ function AIControls({ aiStatus, setAiStatus, storeId, timeRange }: { aiStatus: A
 
 // Insights Panel Component
 function InsightsPanel({ timeRange, storeId }: { timeRange: TimeRange; storeId?: string }) {
-  const [insights, setInsights] = useState<Array<{ id: string; type: string; title: string; description: string }>>([]);
-  const [loading, setLoading] = useState(true);
+  // Use SWR hook for AI insights
+  const { insights: fetchedInsights, isLoading: loading } = useAIInsights(storeId, timeRange);
 
-  useEffect(() => {
-    async function fetchInsights() {
-      if (!storeId) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        setLoading(true);
-        const response = await fetch(
-          `/api/ai/insights/${storeId}?timeRange=${timeRange}`
-        );
-
-        if (response.ok) {
-          const data = await response.json();
-          setInsights(data);
-        } else {
-          // Fallback to default insights on error
-          setInsights([
-            {
-              id: '1',
-              type: 'learning',
-              title: 'AI Learning Active',
-              description: 'Agent is continuously improving send timing based on your customers\' behavior patterns.'
-            },
-            {
-              id: '2',
-              type: 'info',
-              title: 'Optimal Timing Detected',
-              description: 'AI analyzes customer engagement patterns to determine the best time to send messages.'
-            }
-          ]);
-        }
-      } catch (error) {
-        console.error('Error fetching insights:', error);
-        setInsights([
-          {
-            id: '1',
-            type: 'learning',
-            title: 'AI Learning Active',
-            description: 'Agent is continuously improving send timing based on your customers\' behavior patterns.'
-          }
-        ]);
-      } finally {
-        setLoading(false);
-      }
+  // Fallback to default insights if no data
+  const insights = fetchedInsights.length > 0 ? fetchedInsights : [
+    {
+      id: '1',
+      type: 'learning',
+      title: 'AI Learning Active',
+      description: 'Agent is continuously improving send timing based on your customers\' behavior patterns.'
+    },
+    {
+      id: '2',
+      type: 'info',
+      title: 'Optimal Timing Detected',
+      description: 'AI analyzes customer engagement patterns to determine the best time to send messages.'
     }
-
-    fetchInsights();
-  }, [storeId, timeRange]);
+  ];
 
   const getInsightIcon = (type: string) => {
     switch (type) {
@@ -1160,60 +997,23 @@ export default function DashboardPage() {
 
 // Campaign Performance Component
 function CampaignPerformance({ timeRange, storeId }: { timeRange: TimeRange; storeId?: string }) {
-  const [campaigns, setCampaigns] = useState<Array<{
-    id: string;
-    name: string;
-    icon: React.ReactNode;
-    trigger: string;
-    status: 'active' | 'learning';
-    sent: number;
-    conversions: number;
-    revenue: number;
-    revenuePerRecipient: number;
-  }>>([]);
-  const [loading, setLoading] = useState(true);
+  // Use SWR hook for campaign data
+  const { campaigns: rawCampaigns, isLoading: loading } = useCampaignPerformance(storeId, timeRange);
 
-  useEffect(() => {
-    async function fetchCampaigns() {
-      if (!storeId) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        setLoading(true);
-        const response = await fetch(
-          `/api/analytics/campaign-performance/${storeId}?timeRange=${timeRange}`
-        );
-
-        if (response.ok) {
-          const data = await response.json();
-          // Map backend data to frontend format
-          const mappedCampaigns = data.map((c: any) => ({
-            id: c.campaign_type,
-            name: getCampaignName(c.campaign_type),
-            icon: getCampaignIcon(c.campaign_type),
-            trigger: getCampaignTrigger(c.campaign_type),
-            status: c.conversion_rate > 15 ? 'active' as const : 'learning' as const,
-            sent: c.emails_sent,
-            conversions: c.conversions,
-            revenue: c.revenue_generated,
-            revenuePerRecipient: c.emails_sent > 0 ? c.revenue_generated / c.emails_sent : 0,
-          }));
-          setCampaigns(mappedCampaigns);
-        } else {
-          setCampaigns([]);
-        }
-      } catch (error) {
-        console.error('Error fetching campaigns:', error);
-        setCampaigns([]);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchCampaigns();
-  }, [storeId, timeRange]);
+  // Map backend data to frontend format
+  const campaigns = Array.isArray(rawCampaigns) 
+    ? rawCampaigns.map((c: any) => ({
+        id: c.campaign_type,
+        name: getCampaignName(c.campaign_type),
+        icon: getCampaignIcon(c.campaign_type),
+        trigger: getCampaignTrigger(c.campaign_type),
+        status: c.conversion_rate > 15 ? 'active' as const : 'learning' as const,
+        sent: c.emails_sent,
+        conversions: c.conversions,
+        revenue: c.revenue_generated,
+        revenuePerRecipient: c.emails_sent > 0 ? c.revenue_generated / c.emails_sent : 0,
+      }))
+    : [];
 
   const getCampaignName = (type: string) => {
     const names: Record<string, string> = {

@@ -25,7 +25,30 @@ export async function POST(request: NextRequest) {
     const signature = request.headers.get('x-shopify-hmac-sha256');
     const topic = request.headers.get('x-shopify-topic');
     
+    // Log all incoming webhook headers for debugging
+    logger.info('WEBHOOK HEADERS RECEIVED', {
+      context: 'WebhookHandler',
+      metadata: {
+        shop,
+        topic,
+        hasSignature: !!signature,
+        signatureLength: signature?.length,
+        signaturePrefix: signature?.substring(0, 20),
+        allHeaders: {
+          'x-shopify-topic': topic,
+          'x-shopify-shop-domain': shop,
+          'x-shopify-webhook-id': request.headers.get('x-shopify-webhook-id'),
+          'x-shopify-api-version': request.headers.get('x-shopify-api-version'),
+          'user-agent': request.headers.get('user-agent'),
+        }
+      }
+    });
+    
     if (!shop) {
+      logger.error('Missing shop domain in webhook', {
+        context: 'WebhookHandler',
+        metadata: { availableHeaders: Object.fromEntries(request.headers.entries()) }
+      });
       return new Response('Missing shop domain', { status: 400 });
     }
     

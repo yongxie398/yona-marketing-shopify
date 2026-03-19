@@ -174,8 +174,19 @@ class AICoreService {
 
   // Forward Shopify events to Core AI Service
   async forwardEvent(event: AICoreEvent): Promise<void> {
+    const url = `${this.baseUrl}/events`;
     try {
-      const response = await fetch(`${this.baseUrl}/events`, {
+      logger.info('Forwarding event to Core AI Service', {
+        context: 'AICoreService',
+        metadata: { 
+          event_type: event.event_type, 
+          store_id: event.store_id,
+          url: url,
+          hasApiKey: !!this.apiKey
+        }
+      });
+
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -184,20 +195,66 @@ class AICoreService {
         body: JSON.stringify(event),
       });
 
+      // Check content type to detect HTML error pages
+      const contentType = response.headers.get('content-type');
+      const responseText = await response.text();
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(`AICoreService: ${errorData.detail || errorData.message || response.statusText}`);
+        // If response is HTML, log it for debugging
+        if (contentType?.includes('text/html') || responseText.startsWith('<!DOCTYPE')) {
+          logger.error('Core AI Service returned HTML instead of JSON', {
+            context: 'AICoreService',
+            metadata: {
+              url: url,
+              status: response.status,
+              statusText: response.statusText,
+              contentType: contentType,
+              responsePreview: responseText.substring(0, 200)
+            }
+          });
+          throw new Error(`AICoreService returned HTML (status ${response.status}): ${responseText.substring(0, 100)}`);
+        }
+        
+        // Try to parse as JSON
+        try {
+          const errorData = JSON.parse(responseText);
+          throw new Error(`AICoreService: ${errorData.detail || errorData.message || response.statusText}`);
+        } catch (parseError) {
+          throw new Error(`AICoreService: ${response.statusText} - ${responseText.substring(0, 100)}`);
+        }
       }
 
-      logger.info('Event forwarded to Core AI Service successfully', {
-        context: 'AICoreService',
-        metadata: { event_type: event.event_type, store_id: event.store_id }
-      });
+      // Try to parse successful response
+      try {
+        const responseData = JSON.parse(responseText);
+        logger.info('Event forwarded to Core AI Service successfully', {
+          context: 'AICoreService',
+          metadata: { 
+            event_type: event.event_type, 
+            store_id: event.store_id,
+            responseId: responseData.id
+          }
+        });
+      } catch (parseError) {
+        logger.warn('Event forwarded but response was not valid JSON', {
+          context: 'AICoreService',
+          metadata: { 
+            event_type: event.event_type, 
+            store_id: event.store_id,
+            responseText: responseText.substring(0, 100)
+          }
+        });
+      }
     } catch (error) {
       logger.error('Error forwarding event to Core AI Service', {
         context: 'AICoreService',
         error: error as Error,
-        metadata: { event_type: event.event_type, store_id: event.store_id }
+        metadata: { 
+          event_type: event.event_type, 
+          store_id: event.store_id,
+          url: url,
+          backendUrl: process.env.BACKEND_URL
+        }
       });
       // Don't throw - this shouldn't crash the entire app
     }

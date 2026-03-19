@@ -343,7 +343,7 @@ export async function GET(request: NextRequest) {
     }
   } else if (sessionVerified) {
     // If we have a valid session token but no code, redirect to Shopify OAuth
-    const authUrl = `https://${normalizedShop}/admin/oauth/authorize?client_id=${env.SHOPIFY_API_KEY}&scope=read_products,write_products,read_orders,write_orders,read_customers,write_customers,read_themes,write_themes,read_script_tags,write_script_tags,read_inventory,write_inventory&redirect_uri=${encodeURIComponent(`${getAppUrl()}/api/auth/callback`)}`;
+    const authUrl = `https://${normalizedShop}/admin/oauth/authorize?client_id=${env.SHOPIFY_API_KEY}&scope=read_products,write_products,read_orders,write_orders,read_customers,write_customers,read_themes,write_themes,read_script_tags,write_script_tags,read_inventory,write_inventory,read_checkouts,write_checkouts,read_marketing_events,write_marketing_events&redirect_uri=${encodeURIComponent(`${getAppUrl()}/api/auth/callback`)}`;
     redirect(authUrl);
   } else {
     logger.error('Invalid session and no authorization code', {

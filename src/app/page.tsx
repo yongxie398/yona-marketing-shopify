@@ -878,6 +878,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [showFirstSale, setShowFirstSale] = useState(false);
   const hasShownCelebration = useRef(false);
+  const firstSaleChecked = useRef(false);
   const [firstSaleData, setFirstSaleData] = useState({
     saleAmount: 0,
     customerName: 'Customer',
@@ -921,7 +922,8 @@ export default function DashboardPage() {
     }
 
     // Check for first sale celebration once on page load (no polling)
-    if (shop) {
+    if (shop && !firstSaleChecked.current) {
+      firstSaleChecked.current = true;
       checkFirstSale(shop);
     }
   }, []);

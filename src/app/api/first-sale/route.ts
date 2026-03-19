@@ -20,9 +20,11 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout 
 }
 
 export async function GET(request: NextRequest) {
+  let shopDomain: string | null = null;
+  
   try {
     const url = new URL(request.url);
-    const shopDomain = url.searchParams.get('shop');
+    shopDomain = url.searchParams.get('shop');
 
     if (!shopDomain) {
       return new Response(JSON.stringify({ error: 'Shop parameter is required' }), {

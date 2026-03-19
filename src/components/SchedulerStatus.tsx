@@ -1,10 +1,9 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useSchedulerStatus } from '@/hooks/useDashboardData';
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Play, Pause, Clock, RefreshCw, Settings } from "lucide-react";
-import logger from '@/utils/logger';
+import { Play, Pause, RefreshCw } from "lucide-react";
 
 interface SchedulerStatusProps {
   storeId?: string;
@@ -23,86 +22,9 @@ interface SchedulerState {
 }
 
 export function SchedulerStatus({ storeId }: SchedulerStatusProps) {
-  const [status, setStatus] = useState<SchedulerState | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [triggering, setTriggering] = useState(false);
-  const hasFetched = useRef(false);
+  const { status, isLoading } = useSchedulerStatus();
 
-  useEffect(() => {
-    async function fetchStatus() {
-      if (hasFetched.current) return;
-      hasFetched.current = true;
-
-      try {
-        setLoading(true);
-
-        const response = await fetch('/api/scheduler/status', {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch scheduler status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        setStatus(data);
-
-        logger.info('Scheduler status fetched', {
-          context: 'SchedulerStatus',
-          metadata: { running: data.running }
-        });
-      } catch (err: any) {
-        logger.error('Error fetching scheduler status', {
-          context: 'SchedulerStatus',
-          error: err
-        });
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchStatus();
-  }, []);
-
-  const handleTrigger = async () => {
-    try {
-      setTriggering(true);
-
-      const response = await fetch('/api/scheduler/status', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to trigger scheduler: ${response.status}`);
-      }
-
-      const data = await response.json();
-      
-      logger.info('Scheduler triggered', {
-        context: 'SchedulerStatus',
-        metadata: data
-      });
-
-      // Refresh status after a short delay
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
-    } catch (err: any) {
-      logger.error('Error triggering scheduler', {
-        context: 'SchedulerStatus',
-        error: err
-      });
-    } finally {
-      setTriggering(false);
-    }
-  };
-
-  if (loading) {
+  if (isLoading) {
     return (
       <Card className="p-4">
         <div className="animate-pulse flex items-center gap-4">
@@ -139,43 +61,7 @@ export function SchedulerStatus({ storeId }: SchedulerStatusProps) {
             </p>
           </div>
         </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleTrigger}
-            disabled={triggering}
-            className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white text-sm font-medium rounded-lg transition-colors"
-          >
-            {triggering ? (
-              <RefreshCw className="w-4 h-4 animate-spin" />
-            ) : (
-              <Play className="w-4 h-4" />
-            )}
-            Run Now
-          </button>
-        </div>
       </div>
-
-      {status?.delay_config && (
-        <div className="mt-4 pt-4 border-t border-gray-100">
-          <div className="flex items-center gap-2 mb-2">
-            <Clock className="w-4 h-4 text-gray-400" />
-            <span className="text-xs font-medium text-gray-600">Campaign Delays</span>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {Object.entries(status.delay_config).map(([campaign, config]) => (
-              <div key={campaign} className="flex items-center justify-between text-xs">
-                <span className="text-gray-500 capitalize">{campaign.replace('_', ' ')}</span>
-                <span className="text-gray-700 font-medium">
-                  {config.hours > 0 && `${config.hours}h `}
-                  {config.minutes > 0 && `${config.minutes}m`}
-                  {config.hours === 0 && config.minutes === 0 && 'Immediate'}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </Card>
   );
 }

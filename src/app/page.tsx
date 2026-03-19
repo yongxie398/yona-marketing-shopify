@@ -329,9 +329,6 @@ function StatusCard({ aiStatus, storeId, shopDomain }: { aiStatus: AIStatus; sto
     }
 
     fetchStatusMetrics();
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchStatusMetrics, 30000);
-    return () => clearInterval(interval);
   }, [storeId]);
 
   const formatRevenue = (value: number) => {

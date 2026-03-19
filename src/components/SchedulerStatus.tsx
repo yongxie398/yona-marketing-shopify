@@ -60,10 +60,6 @@ export function SchedulerStatus({ storeId }: SchedulerStatusProps) {
     }
 
     fetchStatus();
-
-    // Poll for status every 30 seconds
-    const interval = setInterval(fetchStatus, 30000);
-    return () => clearInterval(interval);
   }, []);
 
   const handleTrigger = async () => {

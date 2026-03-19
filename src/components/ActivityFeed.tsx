@@ -202,10 +202,6 @@ export function ActivityFeed({ aiStatus, storeId }: ActivityFeedProps) {
     }
 
     fetchActivities();
-
-    // Poll for new activities every 30 seconds
-    const interval = setInterval(fetchActivities, 30000);
-    return () => clearInterval(interval);
   }, [storeId, aiStatus]);
 
   return (

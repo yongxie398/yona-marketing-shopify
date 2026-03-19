@@ -46,8 +46,14 @@ export async function GET(request: NextRequest) {
     );
 
     if (!response.ok) {
-      logger.error(`Backend returned ${response.status} for shop: ${shopDomain}`);
-      return new Response(JSON.stringify({ error: 'Failed to check first sale status' }), {
+      const errorText = await response.text();
+      logger.error(`Backend returned ${response.status} for shop: ${shopDomain}`, {
+        status: response.status,
+        statusText: response.statusText,
+        responseBody: errorText,
+        shop: shopDomain
+      });
+      return new Response(JSON.stringify({ error: 'Failed to check first sale status', status: response.status }), {
         status: response.status,
         headers: { 'Content-Type': 'application/json' },
       });
@@ -60,8 +66,14 @@ export async function GET(request: NextRequest) {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (error: any) {
-    logger.error('Error checking first sale status:', error);
-    return new Response(JSON.stringify({ error: 'Failed to check first sale status' }), {
+    const errorMessage = error?.message || 'Unknown error';
+    const errorStack = error?.stack || '';
+    logger.error(`Error checking first sale status for ${shopDomain}: ${errorMessage}`, {
+      error: errorMessage,
+      stack: errorStack,
+      shop: shopDomain
+    });
+    return new Response(JSON.stringify({ error: 'Failed to check first sale status', details: errorMessage }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });

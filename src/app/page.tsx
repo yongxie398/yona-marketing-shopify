@@ -924,12 +924,41 @@ export default function DashboardPage() {
     if (shop) {
       checkFirstSale(shop);
       
-      // Set up polling to check for first sale in real-time (every 5 seconds)
-      const interval = setInterval(() => {
-        checkFirstSale(shop);
-      }, 5000);
+      // Set up polling with exponential backoff on errors
+      let intervalMs = 5000;
+      let consecutiveErrors = 0;
+      const maxIntervalMs = 60000; // Max 1 minute between checks
       
-      return () => clearInterval(interval);
+      const pollFirstSale = async () => {
+        const success = await checkFirstSale(shop);
+        if (success) {
+          consecutiveErrors = 0;
+          intervalMs = 5000; // Reset to normal interval
+        } else {
+          consecutiveErrors++;
+          // Exponential backoff: 5s, 10s, 20s, 40s, 60s, 60s...
+          intervalMs = Math.min(5000 * Math.pow(2, consecutiveErrors), maxIntervalMs);
+          console.log(`First sale check failed, backing off to ${intervalMs}ms (error #${consecutiveErrors})`);
+        }
+      };
+      
+      // Initial check
+      pollFirstSale();
+      
+      // Set up adaptive polling
+      let timeoutId: NodeJS.Timeout;
+      const scheduleNextPoll = () => {
+        timeoutId = setTimeout(async () => {
+          await pollFirstSale();
+          if (!hasShownCelebration.current) {
+            scheduleNextPoll();
+          }
+        }, intervalMs);
+      };
+      
+      scheduleNextPoll();
+      
+      return () => clearTimeout(timeoutId);
     }
   }, []);
 
@@ -984,11 +1013,11 @@ export default function DashboardPage() {
     fetchStoreInfo();
   }, [shopDomain]);
 
-  const checkFirstSale = async (shop: string) => {
+  const checkFirstSale = async (shop: string): Promise<boolean> => {
     // Skip if already shown celebration in this session
     if (hasShownCelebration.current) {
       console.log('Skipping checkFirstSale - already shown in this session');
-      return;
+      return true; // Return true to stop polling
     }
     console.log('checkFirstSale running for shop:', shop);
     
@@ -1029,12 +1058,15 @@ export default function DashboardPage() {
         } else {
           console.log('Not a first sale or already shown');
         }
+        return true; // API call succeeded
       } else {
         const errorData = await response.json().catch(() => ({}));
-        console.error('First sale API error:', errorData);
+        console.error('First sale API error:', response.status, errorData);
+        return false; // API returned error
       }
     } catch (error) {
       console.error('Error checking first sale:', error);
+      return false; // Network or other error
     }
   };
 
